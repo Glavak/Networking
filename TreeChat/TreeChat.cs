@@ -23,7 +23,7 @@ namespace TreeChat
 
         private readonly CancellationTokenSource source = new CancellationTokenSource();
         private Task sendTask;
-        private Task recieveTask;
+        private Task receiveTask;
 
         private State state;
 
@@ -57,13 +57,13 @@ namespace TreeChat
         public void Start()
         {
             sendTask = Task.Run(SendLoop, source.Token);
-            recieveTask = Task.Run(RecieveLoop, source.Token);
+            receiveTask = Task.Run(ReceiveLoop, source.Token);
         }
 
         public void Stop()
         {
             source.Cancel();
-            Task.WaitAll(sendTask, recieveTask);
+            Task.WaitAll(sendTask, receiveTask);
         }
 
         public void SendMessage(string text)
@@ -110,15 +110,17 @@ namespace TreeChat
             }
         }
 
-        private async Task RecieveLoop()
+        private async Task ReceiveLoop()
         {
             while (true)
             {
+                Console.WriteLine("Recieving...");
                 UdpReceiveResult data = await udpclient.ReceiveAsync().ConfigureAwait(false);
 
                 if (new Random().Next(100) < lossPercent)
                 {
                     // Simulate packet loss
+                    Console.WriteLine($"Whoops! Packet from {data.RemoteEndPoint} dropped");
                     continue;
                 }
 
@@ -129,6 +131,8 @@ namespace TreeChat
 
                         byte[] message = {(byte) CommandCode.ConnectToParentAck};
                         await udpclient.SendAsync(message, message.Length, data.RemoteEndPoint).ConfigureAwait(false);
+
+                        Console.WriteLine($"Connected to child {data.RemoteEndPoint}");
 
                         break;
 
@@ -141,11 +145,13 @@ namespace TreeChat
                         if (state == State.WaitingForParentConnection)
                         {
                             state = State.Working;
+                            Console.WriteLine($"Connected to parent");
                         }
                         break;
 
                     case CommandCode.Message:
                         await this.MessageRecieved(data).ConfigureAwait(false);
+                        Console.WriteLine("Message recieved");
                         break;
 
                     case CommandCode.MessageAck:
@@ -155,6 +161,8 @@ namespace TreeChat
                         byte attempts;
                         var messageToRemove = new Message(new Guid(guidBytes));
                         peersPendingMessages[parentEndPoint].TryRemove(messageToRemove, out attempts);
+
+                        Console.WriteLine($"Message delivered to {data.RemoteEndPoint}");
 
                         break;
 
@@ -176,11 +184,13 @@ namespace TreeChat
                 messageSerialized = ms.GetBuffer();
             }
 
-            byte[] buffer = new byte[messageSerialized.Length+1];
+            byte[] buffer = new byte[messageSerialized.Length + 1];
             buffer[0] = (byte) CommandCode.Message;
             Array.Copy(messageSerialized, 0, buffer, 1, messageSerialized.Length);
 
             await udpclient.SendAsync(buffer, buffer.Length, recipient).ConfigureAwait(false);
+
+            Console.WriteLine($"Sent message to {recipient}");
         }
 
         private async Task MessageRecieved(UdpReceiveResult data)
@@ -191,11 +201,6 @@ namespace TreeChat
                 message = (Message) new BinaryFormatter().Deserialize(ms);
             }
 
-            if (lastRecievedMessages.TryAdd(message.Id, message))
-            {
-                Console.WriteLine($"[{message.SenderName}]: {message.Text}");
-            }
-
             byte[] guidSerialized = message.Id.ToByteArray();
             byte[] buffer = new byte[guidSerialized.Length + 1];
             buffer[0] = (byte) CommandCode.MessageAck;
@@ -203,8 +208,17 @@ namespace TreeChat
 
             await udpclient.SendAsync(buffer, buffer.Length, data.RemoteEndPoint).ConfigureAwait(false);
 
-            if (!data.RemoteEndPoint.Equals(parentEndPoint))
+            if (lastRecievedMessages.TryAdd(message.Id, message))
             {
+                Console.WriteLine($"[{message.SenderName}]: {message.Text}");
+
+                foreach (var peer in peersPendingMessages)
+                {
+                    if (!peer.Key.Equals(data.RemoteEndPoint))
+                    {
+                        await this.SendMessage(message, peer.Key).ConfigureAwait(false);
+                    }
+                }
             }
         }
     }

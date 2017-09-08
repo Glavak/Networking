@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 
 namespace TreeChat
 {
@@ -7,6 +8,7 @@ namespace TreeChat
         public static void Main(string[] args)
         {
             TreeChat chat;
+
             if (args.Length == 2)
             {
                 chat = new TreeChat(args[0], 0, null, int.Parse(args[1]));
@@ -22,6 +24,18 @@ namespace TreeChat
             }
 
             chat.Start();
+
+            while (true)
+            {
+                string messageText = Console.ReadLine();
+                if (messageText?.ToLower() == "quit")
+                {
+                    chat.Stop();
+                    return;
+                }
+
+                chat.SendMessage(messageText);
+            }
         }
     }
 }
