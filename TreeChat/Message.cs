@@ -5,6 +5,8 @@ namespace TreeChat
     [Serializable]
     public class Message
     {
+        public Guid id;
+
         public string SenderName;
 
         public string Text;
