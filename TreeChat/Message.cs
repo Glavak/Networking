@@ -3,11 +3,11 @@
 namespace TreeChat
 {
     [Serializable]
-    public struct Message
+    public class Message
     {
         public readonly Guid Id;
 
-        public Message(Guid id) : this()
+        public Message(Guid id)
         {
             Id = id;
         }
@@ -28,7 +28,8 @@ namespace TreeChat
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj)) return false;
-            return obj is Message && Equals((Message) obj);
+            var message = obj as Message;
+            return message != null && Equals(message);
         }
 
         public override int GetHashCode()

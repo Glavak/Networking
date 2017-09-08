@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,10 +13,10 @@ namespace TreeChat
     {
         private readonly TimeSpan retryTimeout = TimeSpan.FromSeconds(3);
 
-        private readonly UdpClient udpclient;
         private readonly string name;
         private readonly int lossPercent;
         private readonly IPEndPoint parentEndPoint;
+        private readonly int localPort;
 
         private readonly bool isParent;
 
@@ -39,6 +38,7 @@ namespace TreeChat
             this.lossPercent = lossPercent;
 
             this.parentEndPoint = parentEndPoint;
+            this.localPort = localPort;
             if (parentEndPoint == null)
             {
                 isParent = true;
@@ -51,13 +51,13 @@ namespace TreeChat
                 peersPendingMessages.TryAdd(parentEndPoint, new ConcurrentDictionary<Message, byte>());
             }
 
-            udpclient = new UdpClient(localPort);
         }
 
         public void Start()
         {
-            sendTask = Task.Run(SendLoop, source.Token);
             receiveTask = Task.Run(ReceiveLoop, source.Token);
+            Task.Delay(100).Wait();
+            sendTask = Task.Run(SendLoop, source.Token);
         }
 
         public void Stop()
@@ -84,10 +84,17 @@ namespace TreeChat
 
         private async Task SendLoop()
         {
+            UdpClient udpClient = new UdpClient();
+
+            udpClient.ExclusiveAddressUse = false;
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveBuffer, 0);
+            udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, localPort));
+
             while (state == State.WaitingForParentConnection)
             {
                 byte[] message = {(byte) CommandCode.ConnectToParent};
-                await udpclient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
+                await udpClient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
 
                 await Task.Delay(1000).ConfigureAwait(false);
             }
@@ -100,7 +107,8 @@ namespace TreeChat
                     {
                         if (DateTime.Now - message.Key.LastTransferred > retryTimeout)
                         {
-                            await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
+                            await this.SendMessage(udpClient, message.Key, peer.Key).ConfigureAwait(false);
+                            message.Key.LastTransferred = DateTime.Now;
                             //message.Value++;
                         }
                     }
@@ -112,10 +120,19 @@ namespace TreeChat
 
         private async Task ReceiveLoop()
         {
+            UdpClient udpClient = new UdpClient();
+
+            udpClient.ExclusiveAddressUse = false;
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, localPort));
+
             while (true)
             {
                 Console.WriteLine("Recieving...");
-                UdpReceiveResult data = await udpclient.ReceiveAsync().ConfigureAwait(false);
+//                UdpReceiveResult data = await udpClient.ReceiveAsync().ConfigureAwait(false);
+
+                IPEndPoint localEp = null;
+                UdpReceiveResult data = new UdpReceiveResult(udpClient.Receive(ref localEp), localEp);
 
                 if (new Random().Next(100) < lossPercent)
                 {
@@ -130,7 +147,7 @@ namespace TreeChat
                         peersPendingMessages.TryAdd(data.RemoteEndPoint, new ConcurrentDictionary<Message, byte>());
 
                         byte[] message = {(byte) CommandCode.ConnectToParentAck};
-                        await udpclient.SendAsync(message, message.Length, data.RemoteEndPoint).ConfigureAwait(false);
+                        await udpClient.SendAsync(message, message.Length, data.RemoteEndPoint).ConfigureAwait(false);
 
                         Console.WriteLine($"Connected to child {data.RemoteEndPoint}");
 
@@ -150,7 +167,7 @@ namespace TreeChat
                         break;
 
                     case CommandCode.Message:
-                        await this.MessageRecieved(data).ConfigureAwait(false);
+                        await this.MessageRecieved(udpClient, data).ConfigureAwait(false);
                         Console.WriteLine("Message recieved");
                         break;
 
@@ -175,7 +192,7 @@ namespace TreeChat
             }
         }
 
-        private async Task SendMessage(Message message, IPEndPoint recipient)
+        private async Task SendMessage(UdpClient udpClient, Message message, IPEndPoint recipient)
         {
             byte[] messageSerialized;
             using (var ms = new MemoryStream())
@@ -188,12 +205,12 @@ namespace TreeChat
             buffer[0] = (byte) CommandCode.Message;
             Array.Copy(messageSerialized, 0, buffer, 1, messageSerialized.Length);
 
-            await udpclient.SendAsync(buffer, buffer.Length, recipient).ConfigureAwait(false);
+            await udpClient.SendAsync(buffer, buffer.Length, recipient).ConfigureAwait(false);
 
             Console.WriteLine($"Sent message to {recipient}");
         }
 
-        private async Task MessageRecieved(UdpReceiveResult data)
+        private async Task MessageRecieved(UdpClient udpClient, UdpReceiveResult data)
         {
             Message message;
             using (var ms = new MemoryStream(data.Buffer))
@@ -206,7 +223,7 @@ namespace TreeChat
             buffer[0] = (byte) CommandCode.MessageAck;
             Array.Copy(guidSerialized, 0, buffer, 1, guidSerialized.Length);
 
-            await udpclient.SendAsync(buffer, buffer.Length, data.RemoteEndPoint).ConfigureAwait(false);
+            await udpClient.SendAsync(buffer, buffer.Length, data.RemoteEndPoint).ConfigureAwait(false);
 
             if (lastRecievedMessages.TryAdd(message.Id, message))
             {
@@ -216,7 +233,7 @@ namespace TreeChat
                 {
                     if (!peer.Key.Equals(data.RemoteEndPoint))
                     {
-                        await this.SendMessage(message, peer.Key).ConfigureAwait(false);
+                        await this.SendMessage(udpClient, message, peer.Key).ConfigureAwait(false);
                     }
                 }
             }
