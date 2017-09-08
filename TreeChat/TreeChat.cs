@@ -5,38 +5,81 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TreeChat
 {
     public class TreeChat
     {
+        private readonly TimeSpan retryTimeout = TimeSpan.FromSeconds(3);
+
         private readonly UdpClient udpclient;
-        private readonly IPEndPoint parentEndPoint;
+        private readonly string name;
         private readonly int lossPercent;
+        private readonly IPEndPoint parentEndPoint;
+
+        private readonly bool isParent;
+
+        private readonly CancellationTokenSource source = new CancellationTokenSource();
+        private Task sendTask;
+        private Task recieveTask;
 
         private State state;
 
-        private readonly ConcurrentBag<IPEndPoint> childs = new ConcurrentBag<IPEndPoint>();
+        private readonly ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, byte>> peersPendingMessages =
+            new ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, byte>>();
 
         private readonly ConcurrentDictionary<Guid, Message> lastRecievedMessages =
             new ConcurrentDictionary<Guid, Message>();
 
-        private readonly ConcurrentDictionary<Guid, Message> pendingMessages =
-            new ConcurrentDictionary<Guid, Message>();
-
-        public TreeChat(int localPort, IPEndPoint parentEndPoint, int lossPercent)
+        public TreeChat(string name, int lossPercent, IPEndPoint parentEndPoint, int localPort)
         {
-            this.parentEndPoint = parentEndPoint;
+            this.name = name;
             this.lossPercent = lossPercent;
 
-            udpclient = new UdpClient(localPort);
+            this.parentEndPoint = parentEndPoint;
+            if (parentEndPoint == null)
+            {
+                isParent = true;
+                this.state = State.Working;
+            }
+            else
+            {
+                isParent = false;
+                this.state = State.WaitingForParentConnection;
+                peersPendingMessages.TryAdd(parentEndPoint, new ConcurrentDictionary<Message, byte>());
+            }
 
-            this.state = parentEndPoint == null ? State.Working : State.WaitingForParentConnection;
+            udpclient = new UdpClient(localPort);
         }
 
         public void Start()
         {
+            sendTask = Task.Run(SendLoop, source.Token);
+            recieveTask = Task.Run(RecieveLoop, source.Token);
+        }
+
+        public void Stop()
+        {
+            source.Cancel();
+            Task.WaitAll(sendTask, recieveTask);
+        }
+
+        public void SendMessage(string text)
+        {
+            var message = new Message(Guid.NewGuid())
+            {
+                SenderName = this.name,
+                Text = text,
+                Created = DateTime.Now,
+                LastTransferred = DateTime.MinValue
+            };
+
+            foreach (var peer in peersPendingMessages)
+            {
+                peer.Value.TryAdd(message, 0);
+            }
         }
 
         private async Task SendLoop()
@@ -45,6 +88,23 @@ namespace TreeChat
             {
                 byte[] message = {(byte) CommandCode.ConnectToParent};
                 await udpclient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
+
+                await Task.Delay(1000).ConfigureAwait(false);
+            }
+
+            while (true)
+            {
+                foreach (var peer in peersPendingMessages)
+                {
+                    foreach (var message in peer.Value)
+                    {
+                        if (DateTime.Now - message.Key.LastTransferred > retryTimeout)
+                        {
+                            await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
+                            //message.Value++;
+                        }
+                    }
+                }
 
                 await Task.Delay(1000).ConfigureAwait(false);
             }
@@ -65,7 +125,7 @@ namespace TreeChat
                 switch ((CommandCode) data.Buffer[0])
                 {
                     case CommandCode.ConnectToParent:
-                        childs.Add(data.RemoteEndPoint);
+                        peersPendingMessages.TryAdd(data.RemoteEndPoint, new ConcurrentDictionary<Message, byte>());
 
                         byte[] message = {(byte) CommandCode.ConnectToParentAck};
                         await udpclient.SendAsync(message, message.Length, data.RemoteEndPoint).ConfigureAwait(false);
@@ -92,26 +152,59 @@ namespace TreeChat
                         byte[] guidBytes = new byte[data.Buffer.Length - 1];
                         Array.Copy(data.Buffer, 1, guidBytes, 0, guidBytes.Length);
 
-                        Message m;
-                        pendingMessages.TryRemove(new Guid(guidBytes), out m);
+                        byte attempts;
+                        var messageToRemove = new Message(new Guid(guidBytes));
+                        peersPendingMessages[parentEndPoint].TryRemove(messageToRemove, out attempts);
+
                         break;
 
                     case CommandCode.Dead:
                         break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
             }
         }
 
+        private async Task SendMessage(Message message, IPEndPoint recipient)
+        {
+            byte[] messageSerialized;
+            using (var ms = new MemoryStream())
+            {
+                new BinaryFormatter().Serialize(ms, message);
+                messageSerialized = ms.GetBuffer();
+            }
+
+            byte[] buffer = new byte[messageSerialized.Length+1];
+            buffer[0] = (byte) CommandCode.Message;
+            Array.Copy(messageSerialized, 0, buffer, 1, messageSerialized.Length);
+
+            await udpclient.SendAsync(buffer, buffer.Length, recipient).ConfigureAwait(false);
+        }
+
         private async Task MessageRecieved(UdpReceiveResult data)
         {
+            Message message;
+            using (var ms = new MemoryStream(data.Buffer))
+            {
+                message = (Message) new BinaryFormatter().Deserialize(ms);
+            }
+
+            if (lastRecievedMessages.TryAdd(message.Id, message))
+            {
+                Console.WriteLine($"[{message.SenderName}]: {message.Text}");
+            }
+
+            byte[] guidSerialized = message.Id.ToByteArray();
+            byte[] buffer = new byte[guidSerialized.Length + 1];
+            buffer[0] = (byte) CommandCode.MessageAck;
+            Array.Copy(guidSerialized, 0, buffer, 1, guidSerialized.Length);
+
+            await udpclient.SendAsync(buffer, buffer.Length, data.RemoteEndPoint).ConfigureAwait(false);
+
             if (!data.RemoteEndPoint.Equals(parentEndPoint))
             {
-                using (var ms = new MemoryStream(data.Buffer))
-                {
-                    var message = (Message) new BinaryFormatter().Deserialize(ms);
-                }
             }
         }
     }
