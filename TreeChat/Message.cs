@@ -28,8 +28,7 @@ namespace TreeChat
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj)) return false;
-            var message = obj as Message;
-            return message != null && Equals(message);
+            return obj is Message && Equals((Message) obj);
         }
 
         public override int GetHashCode()
