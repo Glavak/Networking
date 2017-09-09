@@ -45,5 +45,10 @@ namespace TreeChat
         {
             return !left.Equals(right);
         }
+
+        public override string ToString()
+        {
+            return $"[{this.SenderName}]: {this.Text}";
+        }
     }
 }

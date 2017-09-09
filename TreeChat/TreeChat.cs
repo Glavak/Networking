@@ -68,17 +68,25 @@ namespace TreeChat
 
         public void SendMessage(string text)
         {
-            var message = new Message(Guid.NewGuid())
-            {
-                SenderName = this.name,
-                Text = text,
-                Created = DateTime.Now,
-                LastTransferred = DateTime.MinValue
-            };
+            var id = Guid.NewGuid();
+            bool printed = false;
 
             foreach (var peer in peersPendingMessages)
             {
+                var message = new Message(id)
+                {
+                    SenderName = this.name,
+                    Text = text,
+                    Created = DateTime.Now,
+                    LastTransferred = DateTime.MinValue
+                };
                 peer.Value.TryAdd(message, 0);
+
+                if (!printed)
+                {
+                    Console.WriteLine(message);
+                    printed = true;
+                }
             }
         }
 
@@ -115,64 +123,72 @@ namespace TreeChat
         {
             while (true)
             {
-                Console.WriteLine("Recieving...");
-                UdpReceiveResult data = await udpclient.ReceiveAsync().ConfigureAwait(false);
+                UdpReceiveResult packet = await udpclient.ReceiveAsync().ConfigureAwait(false);
 
                 if (new Random().Next(100) < lossPercent)
                 {
                     // Simulate packet loss
-                    Console.WriteLine($"Whoops! Packet from {data.RemoteEndPoint} dropped");
+                    Console.WriteLine($"Whoops! Packet from {packet.RemoteEndPoint} dropped");
                     continue;
                 }
 
-                switch ((CommandCode) data.Buffer[0])
+                try
                 {
-                    case CommandCode.ConnectToParent:
-                        peersPendingMessages.TryAdd(data.RemoteEndPoint, new ConcurrentDictionary<Message, byte>());
-
-                        byte[] message = {(byte) CommandCode.ConnectToParentAck};
-                        await udpclient.SendAsync(message, message.Length, data.RemoteEndPoint).ConfigureAwait(false);
-
-                        Console.WriteLine($"Connected to child {data.RemoteEndPoint}");
-
-                        break;
-
-                    case CommandCode.ConnectToParentAck:
-                        if (!data.RemoteEndPoint.Equals(parentEndPoint))
-                        {
-                            Console.WriteLine($"Got ConnectToParentAck from {data.RemoteEndPoint}, ignoring");
-                        }
-
-                        if (state == State.WaitingForParentConnection)
-                        {
-                            state = State.Working;
-                            Console.WriteLine($"Connected to parent");
-                        }
-                        break;
-
-                    case CommandCode.Message:
-                        await this.MessageRecieved(data).ConfigureAwait(false);
-                        Console.WriteLine("Message recieved");
-                        break;
-
-                    case CommandCode.MessageAck:
-                        byte[] guidBytes = new byte[data.Buffer.Length - 1];
-                        Array.Copy(data.Buffer, 1, guidBytes, 0, guidBytes.Length);
-
-                        byte attempts;
-                        var messageToRemove = new Message(new Guid(guidBytes));
-                        peersPendingMessages[parentEndPoint].TryRemove(messageToRemove, out attempts);
-
-                        Console.WriteLine($"Message delivered to {data.RemoteEndPoint}");
-
-                        break;
-
-                    case CommandCode.Dead:
-                        break;
-
-                    default:
-                        throw new ArgumentOutOfRangeException();
+                    await RecievePacket(packet).ConfigureAwait(false);
                 }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Error when handling packet from {packet.RemoteEndPoint}: {e.Message}");
+                    throw;
+                }
+            }
+        }
+
+        private async Task RecievePacket(UdpReceiveResult packet)
+        {
+            switch ((CommandCode) packet.Buffer[0])
+            {
+                case CommandCode.ConnectToParent:
+                    peersPendingMessages.TryAdd(packet.RemoteEndPoint, new ConcurrentDictionary<Message, byte>());
+
+                    byte[] message = {(byte) CommandCode.ConnectToParentAck};
+                    await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
+
+                    Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
+
+                    break;
+
+                case CommandCode.ConnectToParentAck:
+                    if (!packet.RemoteEndPoint.Equals(parentEndPoint))
+                    {
+                        Console.WriteLine($"[WARN] Got ConnectToParentAck from {packet.RemoteEndPoint}, ignoring");
+                    }
+
+                    if (state == State.WaitingForParentConnection)
+                    {
+                        state = State.Working;
+                        Console.WriteLine("[INFO] Connected to parent");
+                    }
+                    break;
+
+                case CommandCode.Message:
+                    await this.MessageRecieved(packet).ConfigureAwait(false);
+                    break;
+
+                case CommandCode.MessageAck:
+                    byte[] guidBytes = new byte[packet.Buffer.Length - 1];
+                    Array.Copy(packet.Buffer, 1, guidBytes, 0, guidBytes.Length);
+
+                    byte attempts;
+                    var messageToRemove = new Message(new Guid(guidBytes));
+                    peersPendingMessages[packet.RemoteEndPoint].TryRemove(messageToRemove, out attempts);
+                    break;
+
+                case CommandCode.Dead:
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -190,14 +206,12 @@ namespace TreeChat
             Array.Copy(messageSerialized, 0, buffer, 1, messageSerialized.Length);
 
             await udpclient.SendAsync(buffer, buffer.Length, recipient).ConfigureAwait(false);
-
-            Console.WriteLine($"Sent message to {recipient}");
         }
 
         private async Task MessageRecieved(UdpReceiveResult data)
         {
             Message message;
-            using (var ms = new MemoryStream(data.Buffer, 1, data.Buffer.Length-1))
+            using (var ms = new MemoryStream(data.Buffer, 1, data.Buffer.Length - 1))
             {
                 message = (Message) new BinaryFormatter().Deserialize(ms);
             }
@@ -211,7 +225,7 @@ namespace TreeChat
 
             if (lastRecievedMessages.TryAdd(message.Id, message))
             {
-                Console.WriteLine($"[{message.SenderName}]: {message.Text}");
+                Console.WriteLine(message);
 
                 foreach (var peer in peersPendingMessages)
                 {
