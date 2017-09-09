@@ -18,8 +18,6 @@ namespace TreeChat
 
         public DateTime Created;
 
-        [NonSerialized] public DateTime LastTransferred;
-
         public bool Equals(Message other)
         {
             return Id.Equals(other.Id);

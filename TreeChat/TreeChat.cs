@@ -27,8 +27,8 @@ namespace TreeChat
 
         private State state;
 
-        private readonly ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, byte>> peersPendingMessages =
-            new ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, byte>>();
+        private readonly ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, DateTime>> peersPendingMessages =
+            new ConcurrentDictionary<IPEndPoint, ConcurrentDictionary<Message, DateTime>>();
 
         private readonly ConcurrentDictionary<Guid, Message> lastRecievedMessages =
             new ConcurrentDictionary<Guid, Message>();
@@ -48,7 +48,7 @@ namespace TreeChat
             {
                 isParent = false;
                 this.state = State.WaitingForParentConnection;
-                peersPendingMessages.TryAdd(parentEndPoint, new ConcurrentDictionary<Message, byte>());
+                peersPendingMessages.TryAdd(parentEndPoint, new ConcurrentDictionary<Message, DateTime>());
             }
 
             udpclient = new UdpClient(localPort);
@@ -68,26 +68,19 @@ namespace TreeChat
 
         public void SendMessage(string text)
         {
-            var id = Guid.NewGuid();
-            bool printed = false;
+            var message = new Message(Guid.NewGuid())
+            {
+                SenderName = this.name,
+                Text = text,
+                Created = DateTime.Now
+            };
 
             foreach (var peer in peersPendingMessages)
             {
-                var message = new Message(id)
-                {
-                    SenderName = this.name,
-                    Text = text,
-                    Created = DateTime.Now,
-                    LastTransferred = DateTime.MinValue
-                };
-                peer.Value.TryAdd(message, 0);
-
-                if (!printed)
-                {
-                    Console.WriteLine(message);
-                    printed = true;
-                }
+                peer.Value.TryAdd(message, DateTime.MinValue);
             }
+
+            Console.WriteLine(message);
         }
 
         private async Task SendLoop()
@@ -106,11 +99,10 @@ namespace TreeChat
                 {
                     foreach (var message in peer.Value)
                     {
-                        if (DateTime.Now - message.Key.LastTransferred > retryTimeout)
+                        if (DateTime.Now - message.Value > retryTimeout)
                         {
                             await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
-                            message.Key.LastTransferred = DateTime.Now;
-                            //message.Value++;
+                            peer.Value[message.Key] = DateTime.Now;
                         }
                     }
                 }
@@ -127,7 +119,6 @@ namespace TreeChat
 
                 if (new Random().Next(100) < lossPercent)
                 {
-                    // Simulate packet loss
                     Console.WriteLine($"Whoops! Packet from {packet.RemoteEndPoint} dropped");
                     continue;
                 }
@@ -149,7 +140,7 @@ namespace TreeChat
             switch ((CommandCode) packet.Buffer[0])
             {
                 case CommandCode.ConnectToParent:
-                    peersPendingMessages.TryAdd(packet.RemoteEndPoint, new ConcurrentDictionary<Message, byte>());
+                    peersPendingMessages.TryAdd(packet.RemoteEndPoint, new ConcurrentDictionary<Message, DateTime>());
 
                     byte[] message = {(byte) CommandCode.ConnectToParentAck};
                     await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
@@ -179,9 +170,9 @@ namespace TreeChat
                     byte[] guidBytes = new byte[packet.Buffer.Length - 1];
                     Array.Copy(packet.Buffer, 1, guidBytes, 0, guidBytes.Length);
 
-                    byte attempts;
+                    DateTime lastTransferTime;
                     var messageToRemove = new Message(new Guid(guidBytes));
-                    peersPendingMessages[packet.RemoteEndPoint].TryRemove(messageToRemove, out attempts);
+                    peersPendingMessages[packet.RemoteEndPoint].TryRemove(messageToRemove, out lastTransferTime);
                     break;
 
                 case CommandCode.Dead:
