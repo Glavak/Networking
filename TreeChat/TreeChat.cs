@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -115,19 +116,49 @@ namespace TreeChat
             {
                 foreach (var peer in peers)
                 {
+                    if (peer.Value.LastPinged.SendAttempts > attemtsBeforeBan)
+                    {
+                        DisconnectPeer(peer.Key);
+                        continue;
+                    }
+
                     foreach (var message in peer.Value.PendingMessagesLastSendAttempt)
                     {
+                        if (message.Value.SendAttempts > attemtsBeforeBan)
+                        {
+                            DisconnectPeer(peer.Key);
+                            break;
+                        }
+
                         if (DateTime.Now - message.Value.LastSendTime > retryTimeout)
                         {
                             await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
 
                             var newSentData = new MessageSentData(DateTime.Now, message.Value.SendAttempts + 1);
                             peer.Value.PendingMessagesLastSendAttempt[message.Key] = newSentData;
+                            peer.Value.LastPinged = newSentData;
                         }
                     }
                 }
 
                 await Task.Delay(1000).ConfigureAwait(false);
+            }
+        }
+
+        private void DisconnectPeer(IPEndPoint peer)
+        {
+            peers.TryRemove(peer, out _);
+
+            if (peer.Equals(parentEndPoint))
+            {
+                Console.WriteLine($"[WARN] Parent {peer} disconnected. Trying to connect to different parent..");
+                state = State.WaitingForParentConnection;
+                parentEndPoint = parentsParentEndPoint;
+                parentsParentEndPoint = null;
+            }
+            else
+            {
+                Console.WriteLine($"[WARN] Child {peer} disconnected");
             }
         }
 
@@ -177,6 +208,7 @@ namespace TreeChat
 
                     var messageToRemove = new Message(new Guid(guidBytes));
                     peers[packet.RemoteEndPoint].PendingMessagesLastSendAttempt.TryRemove(messageToRemove, out _);
+                    peers[packet.RemoteEndPoint].MarkAlive();
                     break;
 
                 case CommandCode.Dead:
@@ -279,6 +311,8 @@ namespace TreeChat
             Array.Copy(guidSerialized, 0, buffer, 1, guidSerialized.Length);
 
             await udpclient.SendAsync(buffer, buffer.Length, data.RemoteEndPoint).ConfigureAwait(false);
+
+            peers[data.RemoteEndPoint].MarkAlive();
 
             if (lastRecievedMessages.TryAdd(message.Id, message))
             {
