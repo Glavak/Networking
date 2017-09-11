@@ -12,6 +12,7 @@ namespace TreeChat
     public class TreeChat
     {
         private readonly TimeSpan retryTimeout = TimeSpan.FromSeconds(3);
+        private const int attemtsBeforeBan = 5;
 
         private readonly UdpClient udpclient;
         private readonly string name;
@@ -93,7 +94,7 @@ namespace TreeChat
 
             foreach (var peer in peers)
             {
-                peer.Value.PendingMessagesLastSendAttempt.TryAdd(message, DateTime.MinValue);
+                peer.Value.PendingMessagesLastSendAttempt.TryAdd(message, new MessageSentData(DateTime.Now));
                 this.SendMessage(message, peer.Key).Wait();
             }
 
@@ -116,18 +117,12 @@ namespace TreeChat
                 {
                     foreach (var message in peer.Value.PendingMessagesLastSendAttempt)
                     {
-                        if (DateTime.Now - message.Value > retryTimeout)
+                        if (DateTime.Now - message.Value.LastSendTime > retryTimeout)
                         {
-                            try
-                            {
-                                await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e);
-                                throw;
-                            }
-                            peer.Value.PendingMessagesLastSendAttempt[message.Key] = DateTime.Now;
+                            await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
+
+                            var newSentData = new MessageSentData(DateTime.Now, message.Value.SendAttempts + 1);
+                            peer.Value.PendingMessagesLastSendAttempt[message.Key] = newSentData;
                         }
                     }
                 }
@@ -180,7 +175,6 @@ namespace TreeChat
                     byte[] guidBytes = new byte[packet.Buffer.Length - 1];
                     Array.Copy(packet.Buffer, 1, guidBytes, 0, guidBytes.Length);
 
-                    DateTime _;
                     var messageToRemove = new Message(new Guid(guidBytes));
                     peers[packet.RemoteEndPoint].PendingMessagesLastSendAttempt.TryRemove(messageToRemove, out _);
                     break;
@@ -253,7 +247,6 @@ namespace TreeChat
                 state = State.Working;
                 Console.WriteLine("[INFO] Connected to parent. Parent's parent ip: " + this.parentsParentEndPoint);
             }
-
         }
 
         private async Task SendMessage(Message message, IPEndPoint recipient)
@@ -295,7 +288,7 @@ namespace TreeChat
                 {
                     if (!peer.Key.Equals(data.RemoteEndPoint))
                     {
-                        peer.Value.PendingMessagesLastSendAttempt.TryAdd(message, DateTime.MinValue);
+                        peer.Value.PendingMessagesLastSendAttempt.TryAdd(message, new MessageSentData(DateTime.Now));
                         await this.SendMessage(message, peer.Key).ConfigureAwait(false);
                     }
                 }
