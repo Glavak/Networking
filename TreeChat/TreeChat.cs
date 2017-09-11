@@ -16,7 +16,8 @@ namespace TreeChat
         private readonly UdpClient udpclient;
         private readonly string name;
         private readonly int lossPercent;
-        private readonly IPEndPoint parentEndPoint;
+        private IPEndPoint parentEndPoint;
+        private IPEndPoint parentsParentEndPoint;
 
         private readonly CancellationTokenSource source = new CancellationTokenSource();
         private Task sendTask;
@@ -164,25 +165,11 @@ namespace TreeChat
             switch ((CommandCode) packet.Buffer[0])
             {
                 case CommandCode.ConnectToParent:
-                    peers.TryAdd(packet.RemoteEndPoint, new Peer());
-
-                    byte[] message = {(byte) CommandCode.ConnectToParentAck};
-                    await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
-
-                    Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
+                    await this.OnChildConnected(packet).ConfigureAwait(false);
                     break;
 
                 case CommandCode.ConnectToParentAck:
-                    if (!packet.RemoteEndPoint.Equals(parentEndPoint))
-                    {
-                        Console.WriteLine($"[WARN] Got ConnectToParentAck from {packet.RemoteEndPoint}, ignoring");
-                    }
-
-                    if (state == State.WaitingForParentConnection)
-                    {
-                        state = State.Working;
-                        Console.WriteLine("[INFO] Connected to parent");
-                    }
+                    this.OnConnectedToParent(packet);
                     break;
 
                 case CommandCode.Message:
@@ -204,6 +191,69 @@ namespace TreeChat
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+        }
+
+        private async Task OnChildConnected(UdpReceiveResult packet)
+        {
+            peers.TryAdd(packet.RemoteEndPoint, new Peer());
+
+            byte[] message;
+            if (parentEndPoint != null)
+            {
+                byte[] addressBytes = parentEndPoint.Address.GetAddressBytes();
+                byte[] portBytes = BitConverter.GetBytes(parentEndPoint.Port);
+
+                message = new byte[1 + addressBytes.Length + portBytes.Length];
+                message[0] = (byte) CommandCode.ConnectToParentAck;
+                Array.Copy(addressBytes, 0, message, 1, addressBytes.Length);
+                Array.Copy(portBytes, 0, message, 1 + addressBytes.Length, portBytes.Length);
+            }
+            else
+            {
+                message = new[] {(byte) CommandCode.ConnectToParentAck};
+            }
+
+            await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
+
+            Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
+        }
+
+        private void OnConnectedToParent(UdpReceiveResult packet)
+        {
+            if (!packet.RemoteEndPoint.Equals(parentEndPoint))
+            {
+                Console.WriteLine($"[WARN] Got ConnectToParentAck from {packet.RemoteEndPoint}, ignoring");
+            }
+
+            if (state != State.WaitingForParentConnection)
+            {
+                return;
+            }
+
+            if (packet.Buffer.Length == 1)
+            {
+                this.parentsParentEndPoint = null;
+
+                state = State.Working;
+                Console.WriteLine("[INFO] Connected to parent. Parent is root");
+            }
+            else
+            {
+                byte[] addressBytes = new byte[packet.Buffer.Length - 5];
+                byte[] portBytes = new byte[4];
+
+                Array.Copy(packet.Buffer, 1, addressBytes, 0, addressBytes.Length);
+                Array.Copy(packet.Buffer, packet.Buffer.Length - 4, portBytes, 0, 4);
+
+                IPAddress address = new IPAddress(addressBytes);
+                int port = BitConverter.ToInt32(portBytes, 0);
+
+                this.parentsParentEndPoint = new IPEndPoint(address, port);
+
+                state = State.Working;
+                Console.WriteLine("[INFO] Connected to parent. Parent's parent ip: " + this.parentsParentEndPoint);
+            }
+
         }
 
         private async Task SendMessage(Message message, IPEndPoint recipient)
