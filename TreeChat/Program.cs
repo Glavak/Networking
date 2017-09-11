@@ -7,22 +7,22 @@ namespace TreeChat
     {
         public static void Main(string[] args)
         {
-            TreeChat chat;
+            IPEndPoint endPoint;
 
             if (args.Length == 2)
             {
-                chat = new TreeChat(args[0], 0, null, int.Parse(args[1]));
+                endPoint = null;
             }
             else if (args.Length == 4)
             {
-                chat = new TreeChat(args[0], 0, new IPEndPoint(IPAddress.Parse(args[2]), int.Parse(args[3])),
-                    int.Parse(args[1]));
+                endPoint = new IPEndPoint(IPAddress.Parse(args[2]), int.Parse(args[3]));
             }
             else
             {
                 return;
             }
 
+            TreeChat chat = new TreeChat(args[0], 50, endPoint, int.Parse(args[1]));
             chat.Start();
 
             while (true)

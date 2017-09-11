@@ -18,8 +18,6 @@ namespace TreeChat
         private readonly int lossPercent;
         private readonly IPEndPoint parentEndPoint;
 
-        private readonly bool isParent;
-
         private readonly CancellationTokenSource source = new CancellationTokenSource();
         private Task sendTask;
         private Task receiveTask;
@@ -39,12 +37,10 @@ namespace TreeChat
             this.parentEndPoint = parentEndPoint;
             if (parentEndPoint == null)
             {
-                isParent = true;
                 this.state = State.Working;
             }
             else
             {
-                isParent = false;
                 this.state = State.WaitingForParentConnection;
                 peers.TryAdd(parentEndPoint, new Peer());
             }
@@ -174,7 +170,6 @@ namespace TreeChat
                     await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
 
                     Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
-
                     break;
 
                 case CommandCode.ConnectToParentAck:
