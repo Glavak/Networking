@@ -104,49 +104,62 @@ namespace TreeChat
 
         private async Task SendLoop()
         {
-            while (state == State.WaitingForParentConnection)
-            {
-                byte[] message = {(byte) CommandCode.ConnectToParent};
-                await udpclient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
-
-                await Task.Delay(1000).ConfigureAwait(false);
-            }
-
             while (true)
             {
-                foreach (var peer in peers)
+                while (state == State.WaitingForParentConnection)
                 {
-                    if (peer.Value.LastPinged.SendAttempts > attemtsBeforeBan)
-                    {
-                        DisconnectPeer(peer.Key);
-                        continue;
-                    }
+                    byte[] message = {(byte) CommandCode.ConnectToParent};
+                    await udpclient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
 
-                    foreach (var message in peer.Value.PendingMessagesLastSendAttempt)
+                    await Task.Delay(1000).ConfigureAwait(false);
+                }
+
+                while (state == State.Working)
+                {
+                    foreach (var peer in peers)
                     {
-                        if (message.Value.SendAttempts > attemtsBeforeBan)
+                        if (peer.Value.LastPinged.SendAttempts > attemtsBeforeBan)
                         {
                             DisconnectPeer(peer.Key);
-                            break;
+                            continue;
                         }
 
-                        if (DateTime.Now - message.Value.LastSendTime > retryTimeout)
+                        foreach (var message in peer.Value.PendingMessagesLastSendAttempt)
                         {
-                            await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
+                            if (message.Value.SendAttempts > attemtsBeforeBan)
+                            {
+                                DisconnectPeer(peer.Key);
+                                break;
+                            }
 
-                            var newSentData = new MessageSentData(DateTime.Now, message.Value.SendAttempts + 1);
-                            peer.Value.PendingMessagesLastSendAttempt[message.Key] = newSentData;
+                            if (DateTime.Now - message.Value.LastSendTime > retryTimeout)
+                            {
+                                await this.SendMessage(message.Key, peer.Key).ConfigureAwait(false);
+
+                                var newSentData = new MessageSentData(DateTime.Now, message.Value.SendAttempts + 1);
+                                peer.Value.PendingMessagesLastSendAttempt[message.Key] = newSentData;
+                                peer.Value.LastPinged = newSentData;
+                            }
+                        }
+
+                        if (DateTime.Now - peer.Value.LastPinged.LastSendTime > retryTimeout)
+                        {
+                            byte[] message = {(byte) CommandCode.Ping};
+                            await udpclient.SendAsync(message, 1, peer.Key).ConfigureAwait(false);
+
+                            var newSentData = new MessageSentData(DateTime.Now, peer.Value.LastPinged.SendAttempts + 1);
                             peer.Value.LastPinged = newSentData;
                         }
                     }
-                }
 
-                await Task.Delay(1000).ConfigureAwait(false);
+                    await Task.Delay(1000).ConfigureAwait(false);
+                }
             }
         }
 
         private void DisconnectPeer(IPEndPoint peer)
         {
+            Peer _;
             peers.TryRemove(peer, out _);
 
             if (peer.Equals(parentEndPoint))
@@ -166,7 +179,15 @@ namespace TreeChat
         {
             while (true)
             {
-                UdpReceiveResult packet = await udpclient.ReceiveAsync().ConfigureAwait(false);
+                UdpReceiveResult packet;
+                try
+                {
+                    packet = await udpclient.ReceiveAsync().ConfigureAwait(false);
+                }
+                catch (SocketException)
+                {
+                    continue;
+                }
 
                 if (new Random().Next(100) < lossPercent)
                 {
@@ -206,12 +227,19 @@ namespace TreeChat
                     byte[] guidBytes = new byte[packet.Buffer.Length - 1];
                     Array.Copy(packet.Buffer, 1, guidBytes, 0, guidBytes.Length);
 
+                    MessageSentData _;
                     var messageToRemove = new Message(new Guid(guidBytes));
                     peers[packet.RemoteEndPoint].PendingMessagesLastSendAttempt.TryRemove(messageToRemove, out _);
                     peers[packet.RemoteEndPoint].MarkAlive();
                     break;
 
-                case CommandCode.Dead:
+                case CommandCode.Ping:
+                    byte[] message = {(byte)CommandCode.Pong};
+                    await udpclient.SendAsync(message, 1, packet.RemoteEndPoint).ConfigureAwait(false);
+                    break;
+
+                case CommandCode.Pong:
+                    peers[packet.RemoteEndPoint].MarkAlive();
                     break;
 
                 default:

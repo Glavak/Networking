@@ -6,6 +6,7 @@
         ConnectToParentAck = 12,
         Message = 20,
         MessageAck = 22,
-        Dead = 30
+        Ping = 30,
+        Pong = 31
     }
 }
