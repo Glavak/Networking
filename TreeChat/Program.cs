@@ -22,7 +22,7 @@ namespace TreeChat
                 return;
             }
 
-            TreeChat chat = new TreeChat(args[0], 50, endPoint, int.Parse(args[1]));
+            TreeChat chat = new TreeChat(args[0], 10, endPoint, int.Parse(args[1]));
             chat.Start();
 
             while (true)

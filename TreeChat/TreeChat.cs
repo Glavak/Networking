@@ -57,8 +57,10 @@ namespace TreeChat
             {
                 try
                 {
-                    await SendLoop();
+                    await SendLoop(source.Token);
                 }
+                catch (OperationCanceledException)
+                { }
                 catch (Exception e)
                 {
                     Console.WriteLine($"FATAL ERROR in send loop: {e}");
@@ -69,8 +71,10 @@ namespace TreeChat
             {
                 try
                 {
-                    await ReceiveLoop();
+                    await ReceiveLoop(source.Token);
                 }
+                catch (OperationCanceledException)
+                { }
                 catch (Exception e)
                 {
                     Console.WriteLine($"FATAL ERROR in receive loop: {e}");
@@ -102,16 +106,16 @@ namespace TreeChat
             Console.WriteLine(message);
         }
 
-        private async Task SendLoop()
+        private async Task SendLoop(CancellationToken cancellationToken)
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 while (state == State.WaitingForParentConnection)
                 {
                     byte[] message = {(byte) CommandCode.ConnectToParent};
                     await udpclient.SendAsync(message, message.Length, parentEndPoint).ConfigureAwait(false);
 
-                    await Task.Delay(1000).ConfigureAwait(false);
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 }
 
                 while (state == State.Working)
@@ -152,7 +156,7 @@ namespace TreeChat
                         }
                     }
 
-                    await Task.Delay(1000).ConfigureAwait(false);
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -168,6 +172,7 @@ namespace TreeChat
                 state = State.WaitingForParentConnection;
                 parentEndPoint = parentsParentEndPoint;
                 parentsParentEndPoint = null;
+                peers.TryAdd(parentEndPoint, new Peer());
             }
             else
             {
@@ -175,9 +180,9 @@ namespace TreeChat
             }
         }
 
-        private async Task ReceiveLoop()
+        private async Task ReceiveLoop(CancellationToken cancellationToken)
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 UdpReceiveResult packet;
                 try
