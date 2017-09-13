@@ -7,6 +7,7 @@ namespace TreeChat
     {
         public ConcurrentDictionary<Message, MessageSentData> PendingMessagesLastSendAttempt;
         public MessageSentData LastPinged;
+        public bool HasBackupParent;
 
         public Peer()
         {

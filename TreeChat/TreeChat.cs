@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -19,7 +19,7 @@ namespace TreeChat
         private readonly string name;
         private readonly int lossPercent;
         private IPEndPoint parentEndPoint;
-        private IPEndPoint parentsParentEndPoint;
+        private IPEndPoint backupParentEndPoint;
 
         private readonly CancellationTokenSource source = new CancellationTokenSource();
         private Task sendTask;
@@ -45,7 +45,7 @@ namespace TreeChat
             else
             {
                 this.state = State.WaitingForParentConnection;
-                peers.TryAdd(parentEndPoint, new Peer());
+                peers.TryAdd(parentEndPoint, new Peer{HasBackupParent = true});
             }
 
             udpclient = new UdpClient(localPort);
@@ -60,7 +60,8 @@ namespace TreeChat
                     await SendLoop(source.Token);
                 }
                 catch (OperationCanceledException)
-                { }
+                {
+                }
                 catch (Exception e)
                 {
                     Console.WriteLine($"FATAL ERROR in send loop: {e}");
@@ -74,7 +75,8 @@ namespace TreeChat
                     await ReceiveLoop(source.Token);
                 }
                 catch (OperationCanceledException)
-                { }
+                {
+                }
                 catch (Exception e)
                 {
                     Console.WriteLine($"FATAL ERROR in receive loop: {e}");
@@ -168,11 +170,11 @@ namespace TreeChat
 
             if (peer.Equals(parentEndPoint))
             {
-                Console.WriteLine($"[WARN] Parent {peer} disconnected. Trying to connect to different parent..");
+                Console.WriteLine($"[WARN] Parent {peer} disconnected. Trying to connect to backup parent..");
                 state = State.WaitingForParentConnection;
-                parentEndPoint = parentsParentEndPoint;
-                parentsParentEndPoint = null;
-                peers.TryAdd(parentEndPoint, new Peer());
+                parentEndPoint = backupParentEndPoint;
+                backupParentEndPoint = null;
+                peers.TryAdd(parentEndPoint, new Peer{HasBackupParent = true});
             }
             else
             {
@@ -239,7 +241,7 @@ namespace TreeChat
                     break;
 
                 case CommandCode.Ping:
-                    byte[] message = {(byte)CommandCode.Pong};
+                    byte[] message = {(byte) CommandCode.Pong};
                     await udpclient.SendAsync(message, 1, packet.RemoteEndPoint).ConfigureAwait(false);
                     break;
 
@@ -254,27 +256,49 @@ namespace TreeChat
 
         private async Task OnChildConnected(UdpReceiveResult packet)
         {
-            peers.TryAdd(packet.RemoteEndPoint, new Peer());
-
-            byte[] message;
-            if (parentEndPoint != null)
+            if (parentEndPoint == null && peers.IsEmpty)
             {
-                byte[] addressBytes = parentEndPoint.Address.GetAddressBytes();
-                byte[] portBytes = BitConverter.GetBytes(parentEndPoint.Port);
+                await this.SendConnectedToParentAck(packet.RemoteEndPoint);
+
+                peers.TryAdd(packet.RemoteEndPoint, new Peer {HasBackupParent = false});
+            }
+            else
+            {
+                IPEndPoint backupParentForChild = parentEndPoint ??
+                                                  peers.Keys.First(x => !x.Equals(packet.RemoteEndPoint));
+
+                await this.SendConnectedToParentAck(packet.RemoteEndPoint, backupParentForChild);
+
+                peers.TryAdd(packet.RemoteEndPoint, new Peer {HasBackupParent = true});
+
+                foreach (var peer in peers.Where(p => !p.Value.HasBackupParent))
+                {
+                    await this.SendConnectedToParentAck(peer.Key, packet.RemoteEndPoint);
+                }
+            }
+
+            Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
+        }
+
+        private async Task SendConnectedToParentAck(IPEndPoint recipient, IPEndPoint backupParent = null)
+        {
+            byte[] message;
+            if (backupParent == null)
+            {
+                message = new[] {(byte) CommandCode.ConnectToParentAck};
+            }
+            else
+            {
+                byte[] addressBytes = backupParent.Address.GetAddressBytes();
+                byte[] portBytes = BitConverter.GetBytes(backupParent.Port);
 
                 message = new byte[1 + addressBytes.Length + portBytes.Length];
                 message[0] = (byte) CommandCode.ConnectToParentAck;
                 Array.Copy(addressBytes, 0, message, 1, addressBytes.Length);
                 Array.Copy(portBytes, 0, message, 1 + addressBytes.Length, portBytes.Length);
             }
-            else
-            {
-                message = new[] {(byte) CommandCode.ConnectToParentAck};
-            }
 
-            await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint).ConfigureAwait(false);
-
-            Console.WriteLine($"[INFO] New child connected: {packet.RemoteEndPoint}");
+            await udpclient.SendAsync(message, message.Length, recipient).ConfigureAwait(false);
         }
 
         private void OnConnectedToParent(UdpReceiveResult packet)
@@ -284,17 +308,12 @@ namespace TreeChat
                 Console.WriteLine($"[WARN] Got ConnectToParentAck from {packet.RemoteEndPoint}, ignoring");
             }
 
-            if (state != State.WaitingForParentConnection)
-            {
-                return;
-            }
-
             if (packet.Buffer.Length == 1)
             {
-                this.parentsParentEndPoint = null;
+                this.backupParentEndPoint = null;
 
                 state = State.Working;
-                Console.WriteLine("[INFO] Connected to parent. Parent is root");
+                Console.WriteLine("[INFO] Connected to parent. Backup parent not set");
             }
             else
             {
@@ -307,10 +326,10 @@ namespace TreeChat
                 IPAddress address = new IPAddress(addressBytes);
                 int port = BitConverter.ToInt32(portBytes, 0);
 
-                this.parentsParentEndPoint = new IPEndPoint(address, port);
+                this.backupParentEndPoint = new IPEndPoint(address, port);
 
                 state = State.Working;
-                Console.WriteLine("[INFO] Connected to parent. Parent's parent ip: " + this.parentsParentEndPoint);
+                Console.WriteLine("[INFO] Connected to parent. Backup parent ip: " + this.backupParentEndPoint);
             }
         }
 
