@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace FileSenderServer
@@ -38,6 +39,12 @@ namespace FileSenderServer
 
                         Directory.CreateDirectory($"uploads/from {remoteEndPoint.Address}");
                         string filepath = $"uploads/from {remoteEndPoint.Address}/{filename}";
+
+                        if (filename.Contains("/") || filename.Contains("\\"))
+                        {
+                            Console.WriteLine($"Incorrect file name: {filename}");
+                            return;
+                        }
 
                         long totalRead;
                         using (FileStream writer = new FileStream(filepath, FileMode.Create, FileAccess.Write))
