@@ -69,22 +69,28 @@ namespace FileSenderServer
                                 if (DateTime.Now > lastRecieve.AddSeconds(1))
                                 {
                                     Console.WriteLine(
-                                        $"Current speed: {lastRead / (DateTime.Now - lastRecieve).TotalMilliseconds}KB/s");
+                                        $"Current speed: {lastRead / (DateTime.Now - lastRecieve).TotalMilliseconds:.0}KB/s");
                                     Console.WriteLine(
-                                        $"Avg speed: {totalRead / (DateTime.Now - started).TotalMilliseconds}KB/s");
+                                        $"Avg speed: {totalRead / (DateTime.Now - started).TotalMilliseconds:.0}KB/s");
 
                                     lastRead = 0;
                                     lastRecieve = DateTime.Now;
                                 }
                             }
                         }
-                        Console.WriteLine($"Accepted file {filename} of size {filesize}B from client {remoteEndPoint.Address}");
-                        Console.WriteLine($"Avg speed: {totalRead / (DateTime.Now - started).TotalMilliseconds}KB/s");
+                        Console.WriteLine(
+                            $"Accepted file {filename} of size {filesize}B from client {remoteEndPoint.Address}");
+                        Console.WriteLine(
+                            $"Avg speed: {totalRead / (DateTime.Now - started).TotalMilliseconds:.0}KB/s");
                         ((Socket) sender).Send(new byte[] {42}, 1, SocketFlags.None);
                     }
                     catch (Exception e)
                     {
                         Console.WriteLine($"Error from client {remoteEndPoint.Address}: {e.Message}");
+                    }
+                    finally
+                    {
+                        ((Socket) sender).Close();
                     }
                 };
 
