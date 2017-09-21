@@ -19,11 +19,14 @@ namespace TreeChat
             }
             else
             {
+                Console.WriteLine("Invalid arguments");
                 return;
             }
 
             TreeChat chat = new TreeChat(args[0], 10, endPoint, int.Parse(args[1]));
             chat.Start();
+
+            AppDomain.CurrentDomain.DomainUnload += (sender, eventArgs) => chat.BroadcastDead().Wait();
 
             while (true)
             {

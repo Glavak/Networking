@@ -25,6 +25,7 @@ namespace FileSenderServer
             {
                 server.OnDataReceived += async (sender, stream) =>
                 {
+                    string filepath = null;
                     byte[] buff = new byte[BufferSize];
                     IPEndPoint remoteEndPoint = (IPEndPoint) ((Socket) sender).RemoteEndPoint;
                     DateTime started = DateTime.Now;
@@ -35,15 +36,17 @@ namespace FileSenderServer
                         int zeroPosition = -1;
                         while (zeroPosition == -1 || read - zeroPosition < 5)
                         {
-                            read = await stream.ReadAsync(buff, read, BufferSize - read);
+                            read += await stream.ReadAsync(buff, read, BufferSize - read);
                             zeroPosition = buff.ToList().IndexOf(0);
                         }
 
                         string filename = Encoding.UTF8.GetString(buff, 0, zeroPosition);
                         long filesize = BitConverter.ToInt64(buff, zeroPosition + 1);
 
+                        Console.WriteLine("1");
+
                         Directory.CreateDirectory($"uploads/from {remoteEndPoint.Address}");
-                        string filepath = $"uploads/from {remoteEndPoint.Address}/{filename}";
+                        filepath = $"uploads/from {remoteEndPoint.Address}/{filename}";
 
                         if (filename.Contains("/") || filename.Contains("\\"))
                         {
@@ -51,8 +54,10 @@ namespace FileSenderServer
                             return;
                         }
 
+                        Console.WriteLine("2");
+
                         long totalRead;
-                        using (FileStream writer = new FileStream(filepath, FileMode.Create, FileAccess.Write))
+                        using (FileStream writer = new FileStream(filepath, FileMode.Open, FileAccess.Write))
                         {
                             await writer.WriteAsync(buff, zeroPosition + 9, read - zeroPosition - 9);
                             totalRead = read - zeroPosition - 9;
@@ -89,6 +94,8 @@ namespace FileSenderServer
                     }
                     catch (Exception e)
                     {
+                        if(filepath != null)
+                        File.Delete(filepath);
                         Console.WriteLine($"Error from client {remoteEndPoint.Address}: {e.Message}");
                     }
                     finally

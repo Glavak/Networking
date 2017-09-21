@@ -7,6 +7,7 @@
         Message = 20,
         MessageAck = 22,
         Ping = 30,
-        Pong = 31
+        Pong = 31,
+        Dead = 40
     }
 }
