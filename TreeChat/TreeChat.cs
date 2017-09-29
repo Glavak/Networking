@@ -12,7 +12,7 @@ namespace TreeChat
 {
     public class TreeChat
     {
-        private readonly TimeSpan retryTimeout = TimeSpan.FromSeconds(3);
+        private readonly TimeSpan retryTimeout = TimeSpan.FromSeconds(1);
         private const int AttemtsBeforeBan = 5;
 
         private readonly UdpClient udpclient;
@@ -86,7 +86,9 @@ namespace TreeChat
 
         public void Stop()
         {
-            source.Cancel();
+            state = State.Terminating;
+            Console.WriteLine("[INFO] Initiating termination procedure");
+            BroadcastDead().Wait();
             Task.WaitAll(sendTask, receiveTask);
         }
 
@@ -120,13 +122,13 @@ namespace TreeChat
                     await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 }
 
-                while (state == State.Working)
+                while (state == State.Working || state == State.Terminating)
                 {
                     foreach (var peer in peers)
                     {
                         if (peer.Value.LastPinged.SendAttempts > AttemtsBeforeBan)
                         {
-                            DisconnectPeer(peer.Key);
+                            await DisconnectPeer(peer.Key).ConfigureAwait(false);
                             continue;
                         }
 
@@ -134,7 +136,7 @@ namespace TreeChat
                         {
                             if (message.Value.SendAttempts > AttemtsBeforeBan)
                             {
-                                DisconnectPeer(peer.Key);
+                                await DisconnectPeer(peer.Key).ConfigureAwait(false);
                                 break;
                             }
 
@@ -150,7 +152,8 @@ namespace TreeChat
 
                         if (DateTime.Now - peer.Value.LastPinged.LastSendTime > retryTimeout)
                         {
-                            byte[] message = {(byte) CommandCode.Ping};
+                            var command = (byte) (state == State.Terminating ? CommandCode.Dead : CommandCode.Ping);
+                            byte[] message = {command};
                             await udpclient.SendAsync(message, 1, peer.Key).ConfigureAwait(false);
 
                             var newSentData = new MessageSentData(DateTime.Now, peer.Value.LastPinged.SendAttempts + 1);
@@ -173,23 +176,43 @@ namespace TreeChat
             }
         }
 
-        private void DisconnectPeer(IPEndPoint peer)
+        private async Task DisconnectPeer(IPEndPoint peer)
         {
             Peer _;
-            peers.TryRemove(peer, out _);
+            if (peers.TryRemove(peer, out _))
+            {
+                if (peer.Equals(parentEndPoint))
+                {
+                    Console.WriteLine($"[WARN] Parent {peer} disconnected. Trying to connect to backup parent..");
+                    state = State.WaitingForParentConnection;
+                    parentEndPoint = backupParentEndPoint;
+                    backupParentEndPoint = null;
+                    peers.TryAdd(parentEndPoint, new Peer {HasBackupParent = true});
+                }
+                else
+                {
+                    Console.WriteLine($"[WARN] Child {peer} disconnected");
+                }
+            }
 
-            if (peer.Equals(parentEndPoint))
+            await udpclient.SendAsync(new[] {(byte) CommandCode.DeadAck}, 1, peer).ConfigureAwait(false);
+        }
+
+        private void CheckForTerminationOver()
+        {
+            if (state != State.Terminating) return;
+
+            foreach (var peer in peers.Values)
             {
-                Console.WriteLine($"[WARN] Parent {peer} disconnected. Trying to connect to backup parent..");
-                state = State.WaitingForParentConnection;
-                parentEndPoint = backupParentEndPoint;
-                backupParentEndPoint = null;
-                peers.TryAdd(parentEndPoint, new Peer {HasBackupParent = true});
+                if (!peer.AwareOfOurDeath || !peer.PendingMessagesLastSendAttempt.IsEmpty)
+                {
+                    return;
+                }
             }
-            else
-            {
-                Console.WriteLine($"[WARN] Child {peer} disconnected");
-            }
+
+            Console.WriteLine("[INFO] All peers disconnected, shutting down");
+
+            source.Cancel();
         }
 
         private async Task ReceiveLoop(CancellationToken cancellationToken)
@@ -248,6 +271,8 @@ namespace TreeChat
                     var messageToRemove = new Message(new Guid(guidBytes));
                     peers[packet.RemoteEndPoint].PendingMessagesLastSendAttempt.TryRemove(messageToRemove, out _);
                     peers[packet.RemoteEndPoint].MarkAlive();
+
+                    CheckForTerminationOver();
                     break;
 
                 case CommandCode.Ping:
@@ -260,7 +285,12 @@ namespace TreeChat
                     break;
 
                 case CommandCode.Dead:
-                    DisconnectPeer(packet.RemoteEndPoint);
+                    await DisconnectPeer(packet.RemoteEndPoint).ConfigureAwait(false);
+                    break;
+
+                case CommandCode.DeadAck:
+                    peers[packet.RemoteEndPoint].AwareOfOurDeath = true;
+                    CheckForTerminationOver();
                     break;
 
                 default:
@@ -320,6 +350,7 @@ namespace TreeChat
             if (!packet.RemoteEndPoint.Equals(parentEndPoint))
             {
                 Console.WriteLine($"[WARN] Got ConnectToParentAck from {packet.RemoteEndPoint}, ignoring");
+                return;
             }
 
             if (packet.Buffer.Length == 1)

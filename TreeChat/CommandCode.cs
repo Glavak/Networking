@@ -8,6 +8,7 @@
         MessageAck = 22,
         Ping = 30,
         Pong = 31,
-        Dead = 40
+        Dead = 40,
+        DeadAck = 41
     }
 }

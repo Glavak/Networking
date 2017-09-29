@@ -3,6 +3,7 @@
     public enum State
     {
         WaitingForParentConnection,
-        Working
+        Working,
+        Terminating
     }
 }

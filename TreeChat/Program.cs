@@ -23,7 +23,7 @@ namespace TreeChat
                 return;
             }
 
-            TreeChat chat = new TreeChat(args[0], 10, endPoint, int.Parse(args[1]));
+            TreeChat chat = new TreeChat(args[0], 0, endPoint, int.Parse(args[1]));
             chat.Start();
 
             AppDomain.CurrentDomain.DomainUnload += (sender, eventArgs) => chat.BroadcastDead().Wait();
