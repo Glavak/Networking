@@ -41,16 +41,23 @@ namespace Client
 
                 BinaryReader reader = new BinaryReader(client.GetStream());
 
-                charsToCalc = reader.ReadInt32();
-                if (charsToCalc == 0)
+                int charsToCalcFromServer = reader.ReadInt32();
+                if (charsToCalcFromServer > 0)
+                {
+                    type = CalcType.ExactlyAsSpecified;
+                    charsToCalc = charsToCalcFromServer;
+                }
+                else if (charsToCalcFromServer < 0)
+                {
+                    type = CalcType.LessThanSpecified;
+                    charsToCalc = -charsToCalcFromServer;
+                }
+                else if (charsToCalcFromServer == 0)
                 {
                     // Hash already found
                     IsFinished = true;
-                }
-                else if (charsToCalc < 0)
-                {
-                    type = CalcType.LessThanSpecified;
-                    charsToCalc = -charsToCalc;
+                    Console.WriteLine("No more jobs availible, stopping");
+                    return;
                 }
 
                 prefix = reader.ReadString();
@@ -79,12 +86,17 @@ namespace Client
                     {
                         CheckStrings(i);
 
-                        if(IsFinished) break;
+                        if (IsFinished) break;
                     }
                     break;
 
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+
+            if (!IsFinished)
+            {
+                Console.WriteLine($"Result for prefix {prefix} not found");
             }
         }
 
@@ -116,8 +128,6 @@ namespace Client
             do
             {
                 string str = prefix + new string(suffix);
-                if (prefix == "AAAAA")
-                    Console.WriteLine($"Found right string! Result: {result}");
                 byte[] bytes = Encoding.UTF8.GetBytes(str);
 
                 byte[] hash = algorithm.ComputeHash(bytes);

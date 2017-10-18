@@ -10,7 +10,6 @@ namespace Server
     {
         private readonly TcpListener listener;
         private CancellationTokenSource tokenSource;
-        private CancellationToken token;
 
         public event EventHandler<NetworkStream> OnDataReceived;
 
@@ -23,21 +22,25 @@ namespace Server
 
         public async Task StartAsync()
         {
-            tokenSource = CancellationTokenSource.CreateLinkedTokenSource(new CancellationToken());
-            this.token = tokenSource.Token;
+            tokenSource = new CancellationTokenSource();
+            tokenSource.Token.Register(() => listener.Stop());
             listener.Start();
             Listening = true;
 
             try
             {
-                while (!this.token.IsCancellationRequested)
+                while (!tokenSource.Token.IsCancellationRequested)
                 {
                     await Task.Run(async () =>
                     {
                         var result = await listener.AcceptTcpClientAsync();
                         OnDataReceived?.Invoke(result.Client, result.GetStream());
-                    }, this.token);
+                    }, tokenSource.Token);
                 }
+            }
+            catch (ObjectDisposedException)
+            {
+                // If we cancelled the token and that Stopped listener, AcceptTcpClientAsync() will throw this exception
             }
             finally
             {
@@ -48,7 +51,7 @@ namespace Server
 
         public void Stop()
         {
-            tokenSource?.Cancel();
+            tokenSource.Cancel();
         }
 
         public void Dispose()

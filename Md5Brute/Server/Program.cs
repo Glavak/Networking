@@ -7,9 +7,11 @@ namespace Server
     {
         public static void Main(string[] args)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes("AAC");
+            int port = int.Parse(args[0]);
+
+            byte[] bytes = Encoding.UTF8.GetBytes("AACACACAGTCA");
             var hash = new MD5Cng().ComputeHash(bytes);
-            new Server(hash).Start();
+            new Server(hash).Start(port);
         }
     }
 }

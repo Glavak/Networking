@@ -10,15 +10,15 @@ namespace Server
 {
     public class Server
     {
-        private const int MaxStringLength = 10;
-        private const int PerClientLength = 5;
+        private const int MaxStringLength = 20;
+        private const int PerClientLength = 10;
 
         private byte[] desiredHash;
 
         private bool finished;
 
         private readonly Dictionary<string, AssociatedClient> prefixes = new Dictionary<string, AssociatedClient>();
-        private readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan timeout = TimeSpan.FromSeconds(10);
 
         public Server(byte[] desiredHash)
         {
@@ -35,9 +35,9 @@ namespace Server
             }
         }
 
-        public void Start()
+        public void Start(int port)
         {
-            using (var server = new TcpServer(IPAddress.Any, 4242))
+            using (var server = new TcpServer(IPAddress.Any, port))
             {
                 server.OnDataReceived += async (sender, stream) =>
                 {
@@ -90,9 +90,9 @@ namespace Server
 
                             Console.WriteLine($"Client {id} finished, hash not found");
 
-                            if (prefixes.Any(p => id == p.Value.guid))
+                            if (prefixes.Any(p => p.Value != null && p.Value.guid == id))
                             {
-                                var tmp = prefixes.FirstOrDefault(p => id == p.Value.guid);
+                                var tmp = prefixes.FirstOrDefault(p => p.Value.guid == id);
                                 string hisPrefix = tmp.Key;
                                 prefixes.Remove(hisPrefix);
 
@@ -111,13 +111,16 @@ namespace Server
                             Console.WriteLine("Waiting for all the clients to finish");
                             finished = true;
 
+                            await Task.Delay(timeout);
                             while (prefixes.Any(x => x.Value != null &&
-                                                     DateTime.Now - x.Value.LastActivity >= timeout))
+                                                     DateTime.Now - x.Value.LastActivity < timeout))
                             {
                                 await Task.Delay(1000);
+                                Console.WriteLine("Waiting..");
                             }
 
                             server.Stop();
+                            Console.WriteLine("Stopping..");
                             break;
 
                         default:
