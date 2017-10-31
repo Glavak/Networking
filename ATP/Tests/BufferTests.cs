@@ -77,5 +77,42 @@ namespace Tests
             Assert.AreEqual(9, res[1]);
             Assert.AreEqual(10, res[2]);
         }
+
+        [Test]
+        public void AddEndGetBegin()
+        {
+            var ret = buffer.TryAddToEnd(new byte[] {5, 6, 7}, 0, 3);
+            var ret2 = buffer.TryAddToEnd(new byte[] {8}, 0, 1);
+            var ret3 = buffer.TryAddToEnd(new byte[] {9, 10}, 0, 2);
+
+            byte[] res = new byte[2];
+            var ret4 = buffer.TryGetFromBegin(res, 2);
+            buffer.DisposeElementsAtBegin(2);
+
+            byte[] res2 = new byte[3];
+            var ret5 = buffer.TryGetFromBegin(res2, 3);
+            buffer.DisposeElementsAtBegin(3);
+
+            byte[] res3 = new byte[1];
+            var ret6 = buffer.TryGetFromBegin(res3, 1);
+            buffer.DisposeElementsAtBegin(1);
+
+            Assert.True(ret);
+            Assert.True(ret2);
+            Assert.True(ret3);
+
+            Assert.True(ret4);
+            Assert.True(ret5);
+            Assert.True(ret6);
+
+            Assert.AreEqual(5, res[0]);
+            Assert.AreEqual(6, res[1]);
+
+            Assert.AreEqual(7, res2[0]);
+            Assert.AreEqual(8, res2[1]);
+            Assert.AreEqual(9, res2[2]);
+
+            Assert.AreEqual(10, res3[0]);
+        }
     }
 }

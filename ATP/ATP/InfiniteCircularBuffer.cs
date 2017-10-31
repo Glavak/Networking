@@ -4,20 +4,26 @@ namespace ATP
 {
     public class InfiniteCircularBuffer
     {
-        public int Size => data.Length;
+        public long Size => data.Length;
+        public long FirstAvailibleAbsolutePosition => firstElementAbsolutePosition;
 
-        private byte[] data;
-        private bool[] validData;
+        private readonly byte[] data;
+        private readonly bool[] validData;
         private long firstElement = 0;
         private long firstElementAbsolutePosition = 0;
-        private long lastElement = 0;
+        private long lastElement = -1;
 
         private long elementsCount => (Size + lastElement - firstElement + 1) % Size;
 
-        public InfiniteCircularBuffer(int size)
+        public InfiniteCircularBuffer(long size)
         {
             data = new byte[size];
             validData = new bool[size];
+        }
+
+        public bool TryAddToEnd(byte[] dataToAdd, int offset, int count)
+        {
+            return TryAdd(dataToAdd, offset, count, firstElementAbsolutePosition + elementsCount);
         }
 
         public bool TryAdd(byte[] dataToAdd, int offset, int count, long absolutePositionToAdd)
@@ -45,6 +51,11 @@ namespace ATP
             return true;
         }
 
+        public bool TryGetFromBegin(byte[] buffer, int count)
+        {
+            return TryGet(buffer, count, firstElementAbsolutePosition);
+        }
+
         public bool TryGet(byte[] buffer, int count, long absolutePositionToGet)
         {
             if (absolutePositionToGet < firstElementAbsolutePosition)
@@ -69,10 +80,14 @@ namespace ATP
                 var indexInData = GetIndexInData(absolutePositionToGet + i);
 
                 buffer[i] = data[indexInData];
-                validData[indexInData] = false;
             }
 
             return true;
+        }
+
+        public void DisposeElementsAtBegin(int count)
+        {
+            DisposeElements(firstElementAbsolutePosition, count);
         }
 
         public void DisposeElements(long absolutePosition, int count)
@@ -100,11 +115,19 @@ namespace ATP
                 firstElementAbsolutePosition += count;
             }
 
-            while (validData[firstElement] == false)
+            if (elementsCount != 0)
             {
-                firstElement = (firstElement + 1) % data.Length;
-                firstElementAbsolutePosition++;
+                while (validData[firstElement] == false)
+                {
+                    firstElement = (firstElement + 1) % data.Length;
+                    firstElementAbsolutePosition++;
+                }
             }
+        }
+
+        public long GetAvailibleBytesAtBegin()
+        {
+
         }
 
         private long GetIndexInData(long absolutePosition)
