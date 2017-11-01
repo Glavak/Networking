@@ -17,10 +17,10 @@ namespace Server
                 socket.Send(data, 0, data.Length);
                 Console.WriteLine($"Sent data: {dataString}");
 
-                byte[] recievedData = new byte[20];
-                socket.Recieve(recievedData, 20);
-                string recievedDataStr = Encoding.UTF8.GetString(recievedData);
-                Console.WriteLine($"Recieved data: {recievedDataStr}");
+                byte[] recievedData = new byte[100];
+                int count = socket.Recieve(recievedData, 100);
+                string recievedDataStr = Encoding.UTF8.GetString(recievedData, 0, count);
+                Console.WriteLine($"Recieved data ({count} bytes): {recievedDataStr}");
             }
         }
     }

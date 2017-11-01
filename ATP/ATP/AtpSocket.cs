@@ -27,12 +27,19 @@ namespace ATP
         {
             lock (RecieveBuffer)
             {
-                //TODO: get less than count, if availiable
-                while (!RecieveBuffer.TryGetFromBegin(buff, count))
+                int bytesAvailiable;
+                do
                 {
-                    Monitor.Wait(RecieveBuffer);
-                }
+                    bytesAvailiable = RecieveBuffer.GetAvailibleBytesAtBegin();
+                    if (bytesAvailiable == 0)
+                    {
+                        Monitor.Wait(RecieveBuffer);
+                    }
+                } while (bytesAvailiable == 0);
 
+                if (bytesAvailiable < count) count = bytesAvailiable;
+
+                RecieveBuffer.TryGetFromBegin(buff, count);
                 RecieveBuffer.DisposeElementsAtBegin(count);
 
                 Monitor.PulseAll(RecieveBuffer);
