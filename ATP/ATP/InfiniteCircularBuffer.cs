@@ -125,9 +125,20 @@ namespace ATP
             }
         }
 
-        public long GetAvailibleBytesAtBegin()
+        public int GetAvailibleBytesAtBegin()
         {
+            if (elementsCount == 0) return 0;
 
+            for (int i = 0; i < Size; i++)
+            {
+                var indexInData = GetIndexInData(firstElementAbsolutePosition + i);
+                if (!validData[indexInData])
+                {
+                    return i;
+                }
+            }
+
+            return (int) Size;
         }
 
         private long GetIndexInData(long absolutePosition)
