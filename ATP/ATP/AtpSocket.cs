@@ -8,6 +8,9 @@ namespace ATP
         internal InfiniteCircularBuffer SendBuffer = new InfiniteCircularBuffer(1024);
         internal InfiniteCircularBuffer RecieveBuffer = new InfiniteCircularBuffer(1024);
 
+        internal DateTime LastSend = DateTime.MinValue;
+        internal DateTime LastRecieved = DateTime.MinValue;
+
         public readonly int SendBy = 64;
 
         public virtual void Send(byte[] buff, int offset, int count)

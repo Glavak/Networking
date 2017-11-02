@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -17,6 +18,9 @@ namespace ATP
         private readonly ConcurrentDictionary<IPEndPoint, AtpServerSocket> clients;
 
         private bool stopping;
+
+        private readonly TimeSpan resendTimeout = TimeSpan.FromMilliseconds(500);
+        private readonly TimeSpan overloadedPause = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// Creates AtpListenSocket object and starts listening for incoming ATP connections on specified port
@@ -42,7 +46,7 @@ namespace ATP
                 }
 
                 IPEndPoint sender = acceptQueue.Dequeue();
-                var socket = new AtpServerSocket(udpclient, sender);
+                var socket = new AtpServerSocket(udpclient, sender, this);
                 clients.TryAdd(sender, socket);
                 return socket;
             }
@@ -52,8 +56,14 @@ namespace ATP
         {
             while (!stopping)
             {
+                bool anythingSent = false;
                 foreach (var atpServerSocket in clients)
                 {
+                    if (DateTime.Now - atpServerSocket.Value.LastSend < resendTimeout)
+                    {
+                        continue;
+                    }
+
                     byte[] message;
 
                     lock (atpServerSocket.Value.SendBuffer)
@@ -68,7 +78,8 @@ namespace ATP
 
                         message[0] = (byte) CommandCode.Data;
 
-                        byte[] lengthBuffer = BitConverter.GetBytes(atpServerSocket.Value.SendBuffer.FirstAvailibleAbsolutePosition);
+                        byte[] lengthBuffer =
+                            BitConverter.GetBytes(atpServerSocket.Value.SendBuffer.FirstAvailibleAbsolutePosition);
                         Array.Copy(lengthBuffer, 0, message, 1, lengthBuffer.Length);
 
                         byte[] buffer = new byte[toRead];
@@ -77,8 +88,23 @@ namespace ATP
                         Array.Copy(buffer, 0, message, 1 + 8, toRead);
                     }
 
-                    //Console.WriteLine($"Sending {message.Length} bytes of message to {atpServerSocket.Key}");
+                    Console.WriteLine($"Sending {message.Length} bytes to {atpServerSocket.Key}");
                     await udpclient.SendAsync(message, message.Length, atpServerSocket.Key);
+                    atpServerSocket.Value.LastSend = DateTime.Now;
+
+                    anythingSent = true;
+                }
+
+                lock (this)
+                {
+                    if (!anythingSent)
+                    {
+                        Monitor.Wait(this, TimeSpan.FromSeconds(1));
+                    }
+                    else
+                    {
+                        //Monitor.PulseAll(this);
+                    }
                 }
             }
         }
@@ -139,6 +165,7 @@ namespace ATP
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
 
                     atpServerSocket = clients[packet.RemoteEndPoint];
+                    atpServerSocket.LastRecieved = DateTime.Now;
 
                     bool added;
                     lock (atpServerSocket.RecieveBuffer)
@@ -152,12 +179,12 @@ namespace ATP
 
                     if (added)
                     {
-                        message = new byte[1+8+8];
+                        message = new byte[1 + 8 + 8];
                         message[0] = (byte) CommandCode.DataAck;
                         Array.Copy(packet.Buffer, 1, message, 1, 8);
 
                         byte[] length = BitConverter.GetBytes((long) (packet.Buffer.Length - 9));
-                        Array.Copy(length, 0, message, 1+8, 8);
+                        Array.Copy(length, 0, message, 1 + 8, 8);
 
                         await udpclient.SendAsync(message, message.Length, packet.RemoteEndPoint);
                     }
@@ -171,17 +198,27 @@ namespace ATP
 
                 case CommandCode.DataAck:
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
-                    long dataBytesCount = BitConverter.ToInt64(packet.Buffer, 1+8);
+                    long dataBytesCount = BitConverter.ToInt64(packet.Buffer, 1 + 8);
 
                     atpServerSocket = clients[packet.RemoteEndPoint];
+                    atpServerSocket.LastRecieved = DateTime.Now;
+                    atpServerSocket.LastSend = DateTime.MinValue; // For next data to be sent w/o timeout
 
-                    Console.WriteLine($"Data ack got from {packet.RemoteEndPoint}  pos: {startAbsolutePosition} count: {dataBytesCount}");
+                    Console.WriteLine(
+                        $"Data ack got from {packet.RemoteEndPoint}  pos: {startAbsolutePosition} count: {dataBytesCount}");
 
                     lock (atpServerSocket.SendBuffer)
                     {
                         atpServerSocket.SendBuffer.DisposeElements(startAbsolutePosition, (int) dataBytesCount);
                         Monitor.PulseAll(atpServerSocket.SendBuffer);
                     }
+
+                    break;
+
+                case CommandCode.Overloaded:
+                    atpServerSocket = clients[packet.RemoteEndPoint];
+                    atpServerSocket.LastRecieved = DateTime.Now;
+                    atpServerSocket.LastSend = DateTime.Now + overloadedPause; // For next data to be sent after pause
 
                     break;
 
@@ -203,10 +240,26 @@ namespace ATP
 
             if (disposing)
             {
+                lock (this)
+                {
+                    while (!clients.All(isClientFinished))
+                    {
+                        Monitor.Wait(this, resendTimeout);
+                    }
+                }
+
+                udpclient.Close();
                 // TODO: close sockets
             }
 
             disposed = true;
+        }
+
+        private bool isClientFinished(KeyValuePair<IPEndPoint, AtpServerSocket> client)
+        {
+            // Has no data or timeouted
+            return client.Value.SendBuffer.GetAvailibleBytesAtBegin() == 0 ||
+                   DateTime.Now - client.Value.LastRecieved > resendTimeout;
         }
     }
 }

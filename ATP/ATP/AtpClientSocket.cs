@@ -17,6 +17,9 @@ namespace ATP
 
         private ClientSocketState state;
 
+        private readonly TimeSpan resendTimeout = TimeSpan.FromMilliseconds(500);
+        private readonly TimeSpan overloadedPause = TimeSpan.FromSeconds(1);
+
         /// <summary>
         /// Creates AtpSocket object and connects to specified server
         /// </summary>
@@ -46,6 +49,11 @@ namespace ATP
         {
             while (!stopping)
             {
+                if (DateTime.Now - LastSend < resendTimeout)
+                {
+                    Monitor.Wait(SendBuffer, DateTime.Now - LastSend);
+                }
+
                 byte[] message;
 
                 lock (SendBuffer)
@@ -72,8 +80,10 @@ namespace ATP
                     Array.Copy(buffer, 0, message, 1 + 8, toRead);
                 }
 
-                //Console.WriteLine($"Sending {message.Length} bytes of message");
+                Console.WriteLine($"Sending {message.Length} bytes to server");
                 await udpclient.SendAsync(message, message.Length, server);
+
+                LastSend = DateTime.Now;
             }
         }
 
@@ -115,6 +125,7 @@ namespace ATP
                         Monitor.Pulse(this);
                     }
 
+                    LastRecieved = DateTime.Now;
                     Console.WriteLine($"Connect acked");
 
                     break;
@@ -122,6 +133,8 @@ namespace ATP
                 case CommandCode.Data:
                     Console.WriteLine($"Data !");
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
+
+                    LastRecieved = DateTime.Now;
 
                     bool added;
                     lock (RecieveBuffer)
@@ -163,6 +176,9 @@ namespace ATP
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
                     long dataBytesCount = BitConverter.ToInt64(packet.Buffer, 1 + 8);
 
+                    LastRecieved = DateTime.Now;
+                    LastSend = DateTime.Now + overloadedPause; // For next data to be sent w/o timeout
+
                     Console.WriteLine($"Data ack got pos: {startAbsolutePosition} count: {dataBytesCount}");
 
                     lock (SendBuffer)
@@ -170,6 +186,12 @@ namespace ATP
                         SendBuffer.DisposeElements(startAbsolutePosition, (int) dataBytesCount);
                         Monitor.PulseAll(SendBuffer);
                     }
+
+                    break;
+
+                case CommandCode.Overloaded:
+                    LastRecieved = DateTime.Now;
+                    LastSend = DateTime.Now + overloadedPause; // For next data to be sent after pause
 
                     break;
 
@@ -186,6 +208,14 @@ namespace ATP
             if (disposing)
             {
                 udpclient.Close();
+
+                lock (SendBuffer)
+                {
+                    while (SendBuffer.GetAvailibleBytesAtBegin() > 0)
+                    {
+                        Monitor.Wait(SendBuffer, resendTimeout);
+                    }
+                }
             }
 
             disposed = true;

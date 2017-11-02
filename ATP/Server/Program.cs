@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using System.Threading;
 using ATP;
 
 namespace Server
@@ -21,6 +22,8 @@ namespace Server
                 int count = socket.Recieve(recievedData, 100);
                 string recievedDataStr = Encoding.UTF8.GetString(recievedData, 0, count);
                 Console.WriteLine($"Recieved data ({count} bytes): {recievedDataStr}");
+
+                Thread.Sleep(1000);
             }
         }
     }
