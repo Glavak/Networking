@@ -64,6 +64,12 @@ namespace ATP
                         continue;
                     }
 
+                    if (failedSendAttempts > 5)
+                    {
+                        dead = true;
+                        return;
+                    }
+
                     int bytesAvailible = SendBuffer.GetAvailibleBytesAtBegin();
                     if (bytesAvailible <= 0)
                     {
@@ -91,6 +97,7 @@ namespace ATP
                 {
                     await udpclient.SendAsync(message, message.Length, server);
                     LastSend = DateTime.Now;
+                    failedSendAttempts++;
                 }
                 catch (SocketException)
                 {
@@ -193,6 +200,7 @@ namespace ATP
 
                     LastRecieved = DateTime.Now;
                     LastSend = DateTime.Now + overloadedPause; // For next data to be sent w/o timeout
+                    failedSendAttempts = 0;
 
                     Console.WriteLine($"Data ack got pos: {startAbsolutePosition} count: {dataBytesCount}");
 
@@ -207,6 +215,7 @@ namespace ATP
                 case CommandCode.Overloaded:
                     LastRecieved = DateTime.Now;
                     LastSend = DateTime.Now + overloadedPause; // For next data to be sent after pause
+                    failedSendAttempts = 0;
 
                     break;
 

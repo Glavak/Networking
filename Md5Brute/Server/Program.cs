@@ -1,4 +1,7 @@
-﻿namespace Server
+﻿using System.Security.Cryptography;
+using System.Text;
+
+namespace Server
 {
     internal class Program
     {
@@ -7,10 +10,10 @@
             string hashString = args[0];
             int port = int.Parse(args[1]);
 
-//            byte[] bytes = Encoding.UTF8.GetBytes("AACACACAGTCA");
-//            var hash = new MD5Cng().ComputeHash(bytes);
+            byte[] bytes = Encoding.UTF8.GetBytes("RACACACAGTCA");
+            var hash = new MD5Cng().ComputeHash(bytes);
 
-            var hash = StringToByteArrayFastest(hashString);
+//            var hash = StringToByteArrayFastest(hashString);
 
             new Server(hash).Start(port);
         }

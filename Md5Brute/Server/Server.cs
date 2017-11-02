@@ -10,7 +10,7 @@ namespace Server
 {
     public class Server
     {
-        private const int MaxStringLength = 20;
+        private const int MaxStringLength = 12;
         private const int PerClientLength = 10;
 
         private byte[] desiredHash;
@@ -100,6 +100,7 @@ namespace Server
                                 {
                                     Console.WriteLine("All prefixes checked, no result found");
                                     finished = true;
+                                    await Task.Delay(timeout);
                                     server.Stop();
                                 }
                             }

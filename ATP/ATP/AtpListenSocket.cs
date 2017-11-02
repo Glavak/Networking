@@ -60,8 +60,14 @@ namespace ATP
                 bool anythingSent = false;
                 foreach (var atpServerSocket in clients)
                 {
-                    if (DateTime.Now - atpServerSocket.Value.LastSend < resendTimeout)
+                    if (atpServerSocket.Value.dead ||
+                        DateTime.Now - atpServerSocket.Value.LastSend < resendTimeout)
                     {
+                        continue;
+                    }
+                    if (atpServerSocket.Value.failedSendAttempts > 5)
+                    {
+                        atpServerSocket.Value.dead = true;
                         continue;
                     }
 
@@ -92,6 +98,7 @@ namespace ATP
                     Console.WriteLine($"Sending {message.Length} bytes to {atpServerSocket.Key}");
                     await udpclient.SendAsync(message, message.Length, atpServerSocket.Key);
                     atpServerSocket.Value.LastSend = DateTime.Now;
+                    atpServerSocket.Value.failedSendAttempts++;
 
                     anythingSent = true;
                 }
@@ -211,6 +218,7 @@ namespace ATP
                     atpServerSocket = clients[packet.RemoteEndPoint];
                     atpServerSocket.LastRecieved = DateTime.Now;
                     atpServerSocket.LastSend = DateTime.MinValue; // For next data to be sent w/o timeout
+                    atpServerSocket.failedSendAttempts=0;
 
                     Console.WriteLine(
                         $"Data ack got from {packet.RemoteEndPoint}  pos: {startAbsolutePosition} count: {dataBytesCount}");
@@ -227,6 +235,7 @@ namespace ATP
                     atpServerSocket = clients[packet.RemoteEndPoint];
                     atpServerSocket.LastRecieved = DateTime.Now;
                     atpServerSocket.LastSend = DateTime.Now + overloadedPause; // For next data to be sent after pause
+                    atpServerSocket.failedSendAttempts=0;
 
                     break;
 
@@ -257,7 +266,6 @@ namespace ATP
                 }
 
                 udpclient.Close();
-                // TODO: close sockets
             }
 
             disposed = true;
