@@ -20,6 +20,7 @@ namespace ATP
         private bool stopping;
 
         private readonly TimeSpan resendTimeout = TimeSpan.FromMilliseconds(500);
+        private readonly TimeSpan disconnectTimeout = TimeSpan.FromMilliseconds(1500);
         private readonly TimeSpan overloadedPause = TimeSpan.FromSeconds(1);
 
         /// <summary>
@@ -161,7 +162,7 @@ namespace ATP
                     break;
 
                 case CommandCode.Data:
-                    Console.WriteLine($"Data !");
+                    Console.WriteLine($"Incoming data");
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
 
                     atpServerSocket = clients[packet.RemoteEndPoint];
@@ -170,8 +171,15 @@ namespace ATP
                     bool added;
                     lock (atpServerSocket.RecieveBuffer)
                     {
-                        added = atpServerSocket.RecieveBuffer.TryAdd(packet.Buffer, 9, packet.Buffer.Length - 9,
-                            startAbsolutePosition);
+                        try
+                        {
+                            added = atpServerSocket.RecieveBuffer.TryAdd(packet.Buffer, 9, packet.Buffer.Length - 9,
+                                startAbsolutePosition);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            break;
+                        }
                         Monitor.PulseAll(atpServerSocket.RecieveBuffer);
                     }
 
@@ -259,7 +267,7 @@ namespace ATP
         {
             // Has no data or timeouted
             return client.Value.SendBuffer.GetAvailibleBytesAtBegin() == 0 ||
-                   DateTime.Now - client.Value.LastRecieved > resendTimeout;
+                   DateTime.Now - client.Value.LastRecieved > disconnectTimeout;
         }
     }
 }

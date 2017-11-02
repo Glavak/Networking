@@ -17,7 +17,11 @@ namespace ATP
 
         private ClientSocketState state;
 
+        private readonly Task sendTask;
+        private readonly Task recieveTask;
+
         private readonly TimeSpan resendTimeout = TimeSpan.FromMilliseconds(500);
+        private readonly TimeSpan disconnectTimeout = TimeSpan.FromMilliseconds(1500);
         private readonly TimeSpan overloadedPause = TimeSpan.FromSeconds(1);
 
         /// <summary>
@@ -29,8 +33,7 @@ namespace ATP
             this.udpclient = new UdpClient();
             this.server = server;
 
-            var sendTask = Task.Run(async () => await SendLoop());
-            var recieveTask = Task.Run(async () => await ReceiveLoop());
+            sendTask = Task.Run(SendLoop);
 
             // Wait for connection to be established
             lock (this)
@@ -39,6 +42,8 @@ namespace ATP
                 {
                     byte[] message = {(byte) CommandCode.Connect};
                     udpclient.Send(message, 1, server);
+
+                    if(recieveTask == null) recieveTask = Task.Run(ReceiveLoop);
 
                     Monitor.Wait(this, TimeSpan.FromSeconds(2));
                 }
@@ -49,15 +54,16 @@ namespace ATP
         {
             while (!stopping)
             {
-                if (DateTime.Now - LastSend < resendTimeout)
-                {
-                    Monitor.Wait(SendBuffer, DateTime.Now - LastSend);
-                }
-
                 byte[] message;
 
                 lock (SendBuffer)
                 {
+                    if (DateTime.Now - LastSend < resendTimeout)
+                    {
+                        Monitor.Wait(SendBuffer, resendTimeout - (DateTime.Now - LastSend));
+                        continue;
+                    }
+
                     int bytesAvailible = SendBuffer.GetAvailibleBytesAtBegin();
                     if (bytesAvailible <= 0)
                     {
@@ -81,9 +87,14 @@ namespace ATP
                 }
 
                 Console.WriteLine($"Sending {message.Length} bytes to server");
-                await udpclient.SendAsync(message, message.Length, server);
-
-                LastSend = DateTime.Now;
+                try
+                {
+                    await udpclient.SendAsync(message, message.Length, server);
+                    LastSend = DateTime.Now;
+                }
+                catch (SocketException)
+                {
+                }
             }
         }
 
@@ -95,6 +106,10 @@ namespace ATP
                 try
                 {
                     packet = await udpclient.ReceiveAsync().ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
                 }
                 catch (SocketException)
                 {
@@ -131,7 +146,7 @@ namespace ATP
                     break;
 
                 case CommandCode.Data:
-                    Console.WriteLine($"Data !");
+                    Console.WriteLine($"Incoming data");
                     startAbsolutePosition = BitConverter.ToInt64(packet.Buffer, 1);
 
                     LastRecieved = DateTime.Now;
@@ -207,15 +222,18 @@ namespace ATP
 
             if (disposing)
             {
-                udpclient.Close();
-
                 lock (SendBuffer)
                 {
-                    while (SendBuffer.GetAvailibleBytesAtBegin() > 0)
+                    while (SendBuffer.GetAvailibleBytesAtBegin() > 0 && DateTime.Now-LastRecieved < disconnectTimeout)
                     {
                         Monitor.Wait(SendBuffer, resendTimeout);
                     }
                 }
+
+                stopping = true;
+                udpclient.Close();
+
+                Task.WaitAll(sendTask, recieveTask);
             }
 
             disposed = true;
