@@ -32,6 +32,11 @@ namespace Server.Model
             return token;
         }
 
+        public void DeauthorizeUser(AuthorizedUser user)
+        {
+            authorizedUsers.Remove(user);
+        }
+
         public AuthorizedUser GetAuthorizedUser(Guid token)
         {
             var user = authorizedUsers.FirstOrDefault(u => u.Token == token);

@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Server
@@ -40,6 +41,11 @@ namespace Server
                 if (handler == null)
                 {
                     context.Response.StatusCode = 404;
+                    context.Response.Headers.Add(HttpResponseHeader.ContentType, "text");
+
+                    byte[] buffer = Encoding.UTF8.GetBytes("No API handlers to process your request");
+                    context.Response.ContentLength64 = buffer.Length;
+                    context.Response.OutputStream.Write(buffer, 0, buffer.Length);
                     continue;
                 }
 

@@ -9,7 +9,7 @@ namespace Server.Handlers
     {
         private readonly AuthorizationManager manager;
 
-        public LoginHandler(AuthorizationManager manager)
+        public LoginHandler(AuthorizationManager manager) : base(manager)
         {
             this.manager = manager;
         }

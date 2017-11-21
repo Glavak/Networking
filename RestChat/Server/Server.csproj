@@ -47,9 +47,12 @@
   <ItemGroup>
     <Compile Include="Exceptions\HttpException.cs" />
     <Compile Include="Exceptions\UsernameTakenException.cs" />
+    <Compile Include="HandlersData\EmptyData.cs" />
+    <Compile Include="HandlersData\LogoutResponse.cs" />
     <Compile Include="Handlers\LoginHandler.cs" />
     <Compile Include="HandlersData\LoginRequest.cs" />
     <Compile Include="HandlersData\LoginResponse.cs" />
+    <Compile Include="Handlers\LogoutHandler.cs" />
     <Compile Include="Model\AuthorizationManager.cs" />
     <Compile Include="Model\AuthorizedUser.cs" />
     <Compile Include="Program.cs" />

@@ -1,15 +1,32 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Server.Model;
 
 namespace Server
 {
     public abstract class SimpleJsonHandler<TRequestData, TResponseData> : RestHandler
     {
+        public AuthorizedUser CurrentUser;
+
+        private readonly AuthorizationManager manager;
+
+        protected SimpleJsonHandler(AuthorizationManager manager)
+        {
+            this.manager = manager;
+        }
+
         public override async Task Handle()
         {
+            if (Request.Headers["Authorization"] != null)
+            {
+                Guid token = Guid.Parse(Request.Headers["Authorization"]);
+                CurrentUser = manager.GetAuthorizedUser(token);
+            }
+
             string requestJson;
             using (var textReader = new StreamReader(Request.InputStream, Request.ContentEncoding))
             {
