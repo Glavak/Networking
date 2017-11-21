@@ -6,7 +6,7 @@ using Server.Model;
 
 namespace Server.Handlers
 {
-    public class UserDetailsHandler : SimpleJsonHandler<EmptyData, UserListResponseUser>
+    public class UserDetailsHandler : SimpleJsonHandler<EmptyData, UserDetailsResponse>
     {
         private readonly AuthorizationManager manager;
 
@@ -18,7 +18,7 @@ namespace Server.Handlers
         public override Regex Endpoint => new Regex("^/users/(\\w+)$");
         public override string HttpMethod => "GET";
 
-        public override Task<UserListResponseUser> Handle(EmptyData _)
+        public override Task<UserDetailsResponse> Handle(EmptyData _)
         {
             if (CurrentUser == null)
             {
@@ -28,7 +28,7 @@ namespace Server.Handlers
             var username = EndpointRegexMatch.Groups[1].Value;
             var user = manager.GetAuthorizedUser(username);
 
-            return Task.FromResult(new UserListResponseUser
+            return Task.FromResult(new UserDetailsResponse
             {
                 Username = user.Username,
                 Online = true

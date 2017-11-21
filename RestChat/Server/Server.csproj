@@ -50,6 +50,7 @@
     <Compile Include="HandlersData\EmptyData.cs" />
     <Compile Include="HandlersData\LogoutResponse.cs" />
     <Compile Include="HandlersData\UserListResponse.cs" />
+    <Compile Include="HandlersData\UserDetailsResponse.cs" />
     <Compile Include="Handlers\LoginHandler.cs" />
     <Compile Include="HandlersData\LoginRequest.cs" />
     <Compile Include="HandlersData\LoginResponse.cs" />
