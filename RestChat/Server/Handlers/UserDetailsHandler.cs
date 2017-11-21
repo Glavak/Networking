@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Server.Exceptions;
 using Server.HandlersData;
@@ -33,7 +34,7 @@ namespace Server.Handlers
             {
                 Id = user.Id,
                 Username = user.Username,
-                Online = true
+                Online = user.Online ? (bool?) true : null
             });
         }
     }

@@ -17,21 +17,30 @@ namespace Server.Model
 
         public AuthorizedUser AuthorizeUser(string username)
         {
-            if (authorizedUsers.Any(u => u.Username == username))
+            var user = authorizedUsers.FirstOrDefault(u => u.Username == username);
+
+            if (user == null)
+            {
+                user = new AuthorizedUser
+                {
+                    Id = nextUserId,
+                    Username = username,
+                    Token = Guid.NewGuid(),
+                    LastActivity = DateTime.Now
+                };
+                nextUserId++;
+                authorizedUsers.Add(user);
+                return user;
+            }
+            else if (!user.Online)
+            {
+                user.LastActivity = DateTime.Now;
+                return user;
+            }
+            else
             {
                 throw new UsernameTakenException();
             }
-
-            var user = new AuthorizedUser
-            {
-                Id = nextUserId,
-                Username = username,
-                Token = Guid.NewGuid()
-            };
-            nextUserId++;
-
-            authorizedUsers.Add(user);
-            return user;
         }
 
         public void DeauthorizeUser(AuthorizedUser user)
@@ -39,7 +48,7 @@ namespace Server.Model
             authorizedUsers.Remove(user);
         }
 
-        public AuthorizedUser GetAuthorizedUser(Guid token)
+        public AuthorizedUser AuthorizeUser(Guid token)
         {
             var user = authorizedUsers.FirstOrDefault(u => u.Token == token);
 
@@ -47,6 +56,8 @@ namespace Server.Model
             {
                 throw new HttpException(403);
             }
+
+            user.LastActivity = DateTime.Now;
 
             return user;
         }

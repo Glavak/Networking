@@ -24,7 +24,7 @@ namespace Server
             if (Request.Headers["Authorization"] != null)
             {
                 Guid token = Guid.Parse(Request.Headers["Authorization"]);
-                CurrentUser = manager.GetAuthorizedUser(token);
+                CurrentUser = manager.AuthorizeUser(token);
             }
 
             string requestJson;

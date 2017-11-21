@@ -11,6 +11,6 @@ namespace Server.HandlersData
         public string Username;
 
         [JsonProperty("online")]
-        public bool Online;
+        public bool? Online;
     }
 }
