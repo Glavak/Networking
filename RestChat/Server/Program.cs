@@ -13,6 +13,7 @@ namespace Server
             server.Handlers.Add(new LoginHandler(authorizationManager));
             server.Handlers.Add(new LogoutHandler(authorizationManager));
             server.Handlers.Add(new UserListHandler(authorizationManager));
+            server.Handlers.Add(new UserDetailsHandler(authorizationManager));
 
             server.Start();
 

@@ -54,6 +54,7 @@
     <Compile Include="HandlersData\LoginRequest.cs" />
     <Compile Include="HandlersData\LoginResponse.cs" />
     <Compile Include="Handlers\LogoutHandler.cs" />
+    <Compile Include="Handlers\UserDetailsHandler.cs" />
     <Compile Include="Handlers\UserListHandler.cs" />
     <Compile Include="Model\AuthorizationManager.cs" />
     <Compile Include="Model\AuthorizedUser.cs" />

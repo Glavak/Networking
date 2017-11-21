@@ -14,7 +14,7 @@ namespace Server.Handlers
             this.manager = manager;
         }
 
-        public override Regex GetEndpoint => new Regex("^/login$");
+        public override Regex Endpoint => new Regex("^/login$");
         public override string HttpMethod => "POST";
 
         public override Task<LoginResponse> Handle(LoginRequest requestData)

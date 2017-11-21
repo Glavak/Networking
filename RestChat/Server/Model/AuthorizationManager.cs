@@ -49,6 +49,18 @@ namespace Server.Model
             return user;
         }
 
+        public AuthorizedUser GetAuthorizedUser(string username)
+        {
+            var user = authorizedUsers.FirstOrDefault(u => u.Username == username);
+
+            if (user == null)
+            {
+                throw new HttpException(404);
+            }
+
+            return user;
+        }
+
         public IEnumerable<AuthorizedUser> GetAuthorizedUsers()
         {
             return authorizedUsers;

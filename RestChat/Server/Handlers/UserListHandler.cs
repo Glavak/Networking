@@ -16,7 +16,7 @@ namespace Server.Handlers
             this.manager = manager;
         }
 
-        public override Regex GetEndpoint => new Regex("^/users$");
+        public override Regex Endpoint => new Regex("^/users$");
         public override string HttpMethod => "GET";
 
         public override Task<UserListResponse> Handle(EmptyData _)

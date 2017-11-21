@@ -49,6 +49,8 @@ namespace Server
                     continue;
                 }
 
+                handler.EndpointRegexMatch = handler.Endpoint.Match(url);
+
                 handler.Request = context.Request;
                 handler.Response = context.Response;
                 handler.StartHandling();
@@ -58,7 +60,7 @@ namespace Server
         private RestHandler FindHandler(string url, string httpMethod)
         {
             return Handlers.FirstOrDefault(handler =>
-                handler.GetEndpoint.IsMatch(url) && handler.HttpMethod == httpMethod);
+                handler.Endpoint.IsMatch(url) && handler.HttpMethod == httpMethod);
         }
     }
 }

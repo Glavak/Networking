@@ -12,6 +12,8 @@ namespace Server
         public HttpListenerRequest Request;
         public HttpListenerResponse Response;
 
+        public Match EndpointRegexMatch;
+
         public void StartHandling()
         {
             Task.Run(async () =>
@@ -47,7 +49,7 @@ namespace Server
 
         public abstract Task Handle();
 
-        public abstract Regex GetEndpoint { get; }
+        public abstract Regex Endpoint { get; }
 
         public abstract string HttpMethod { get; }
     }
