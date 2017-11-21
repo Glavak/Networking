@@ -25,7 +25,8 @@ namespace Server.Handlers
                 throw new HttpException(401);
             }
 
-            var userId = int.Parse(EndpointRegexMatch.Groups[1].Value);
+            var endpointRegexMatch = Endpoint.Match(Request.Url.AbsolutePath);
+            var userId = int.Parse(endpointRegexMatch.Groups[1].Value);
             var user = manager.GetAuthorizedUser(userId);
 
             return Task.FromResult(new UserDetailsResponse

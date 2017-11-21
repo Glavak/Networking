@@ -49,8 +49,6 @@ namespace Server
                     continue;
                 }
 
-                handler.EndpointRegexMatch = handler.Endpoint.Match(url);
-
                 handler.Request = context.Request;
                 handler.Response = context.Response;
                 handler.StartHandling();

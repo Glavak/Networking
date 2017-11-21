@@ -12,8 +12,6 @@ namespace Server
         public HttpListenerRequest Request;
         public HttpListenerResponse Response;
 
-        public Match EndpointRegexMatch;
-
         public void StartHandling()
         {
             Task.Run(async () =>
