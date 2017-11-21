@@ -48,5 +48,7 @@ namespace Server
         public abstract Task Handle();
 
         public abstract Regex GetEndpoint { get; }
+
+        public abstract string HttpMethod { get; }
     }
 }

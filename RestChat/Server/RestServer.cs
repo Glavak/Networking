@@ -37,7 +37,7 @@ namespace Server
                 var context = await httpListener.GetContextAsync().ConfigureAwait(false);
                 var url = context.Request.Url.AbsolutePath;
 
-                var handler = FindHandler(url);
+                var handler = FindHandler(url, context.Request.HttpMethod);
                 if (handler == null)
                 {
                     context.Response.StatusCode = 404;
@@ -55,9 +55,10 @@ namespace Server
             }
         }
 
-        private RestHandler FindHandler(string url)
+        private RestHandler FindHandler(string url, string httpMethod)
         {
-            return Handlers.FirstOrDefault(handler => handler.GetEndpoint.IsMatch(url));
+            return Handlers.FirstOrDefault(handler =>
+                handler.GetEndpoint.IsMatch(url) && handler.HttpMethod == httpMethod);
         }
     }
 }

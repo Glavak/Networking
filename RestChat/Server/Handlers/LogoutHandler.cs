@@ -16,6 +16,7 @@ namespace Server.Handlers
         }
 
         public override Regex GetEndpoint => new Regex("^/logout$");
+        public override string HttpMethod => "GET";
 
         public override Task<LogoutResponse> Handle(EmptyData _)
         {
