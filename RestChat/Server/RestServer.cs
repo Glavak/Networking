@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -10,12 +11,12 @@ namespace Server
     {
         private readonly HttpListener httpListener;
 
-        public List<RestHandler> Handlers;
+        public List<RestHandler> Handlers = new List<RestHandler>();
 
         public RestServer()
         {
             httpListener = new HttpListener();
-            Handlers = new List<RestHandler>();
+            httpListener.TimeoutManager.IdleConnection = TimeSpan.FromSeconds(10);
             httpListener.Prefixes.Add("http://127.0.0.1:4242/");
         }
 
