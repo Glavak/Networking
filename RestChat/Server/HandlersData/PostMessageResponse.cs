@@ -9,5 +9,8 @@ namespace Server.HandlersData
 
         [JsonProperty("message")]
         public string Message;
+
+        [JsonProperty("author")]
+        public int AuthorId;
     }
 }

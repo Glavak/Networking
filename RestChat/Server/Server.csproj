@@ -48,11 +48,13 @@
     <Compile Include="Exceptions\HttpException.cs" />
     <Compile Include="Exceptions\UsernameTakenException.cs" />
     <Compile Include="HandlersData\EmptyData.cs" />
+    <Compile Include="HandlersData\GetMessagesResponse.cs" />
     <Compile Include="HandlersData\LogoutResponse.cs" />
     <Compile Include="HandlersData\PostMessageRequest.cs" />
     <Compile Include="HandlersData\PostMessageResponse.cs" />
     <Compile Include="HandlersData\UserListResponse.cs" />
     <Compile Include="HandlersData\UserDetailsResponse.cs" />
+    <Compile Include="Handlers\GetMessagesHandler.cs" />
     <Compile Include="Handlers\LoginHandler.cs" />
     <Compile Include="HandlersData\LoginRequest.cs" />
     <Compile Include="HandlersData\LoginResponse.cs" />

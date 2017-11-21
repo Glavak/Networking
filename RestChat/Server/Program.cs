@@ -18,6 +18,7 @@ namespace Server
             server.Handlers.Add(new UserListHandler(authorizationManager));
             server.Handlers.Add(new UserDetailsHandler(authorizationManager));
 
+            server.Handlers.Add(new GetMessagesHandler(authorizationManager, messagesManager));
             server.Handlers.Add(new PostMessageHandler(authorizationManager, messagesManager));
 
             server.Start();

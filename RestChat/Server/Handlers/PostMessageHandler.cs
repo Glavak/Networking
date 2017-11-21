@@ -6,7 +6,7 @@ using Server.Model;
 
 namespace Server.Handlers
 {
-    public class PostMessageHandler: SimpleJsonHandler<PostMessageRequest, PostMessageResponse>
+    public class PostMessageHandler : SimpleJsonHandler<PostMessageRequest, PostMessageResponse>
     {
         private readonly MessagesManager messagesManager;
 
@@ -31,7 +31,8 @@ namespace Server.Handlers
             return Task.FromResult(new PostMessageResponse
             {
                 Id = message.Id,
-                Message = message.Text
+                Message = message.Text,
+                AuthorId = message.AuthorId
             });
         }
     }
