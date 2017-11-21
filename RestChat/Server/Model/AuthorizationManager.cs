@@ -8,28 +8,30 @@ namespace Server.Model
     public class AuthorizationManager
     {
         private readonly List<AuthorizedUser> authorizedUsers;
+        private int nextUserId = 1;
 
         public AuthorizationManager()
         {
             this.authorizedUsers = new List<AuthorizedUser>();
         }
 
-        public Guid AuthorizeUser(string username)
+        public AuthorizedUser AuthorizeUser(string username)
         {
             if (authorizedUsers.Any(u => u.Username == username))
             {
                 throw new UsernameTakenException();
             }
 
-            var token = Guid.NewGuid();
-
-            authorizedUsers.Add(new AuthorizedUser
+            var user = new AuthorizedUser
             {
+                Id = nextUserId,
                 Username = username,
-                Token = token
-            });
+                Token = Guid.NewGuid()
+            };
+            nextUserId++;
 
-            return token;
+            authorizedUsers.Add(user);
+            return user;
         }
 
         public void DeauthorizeUser(AuthorizedUser user)
@@ -49,9 +51,9 @@ namespace Server.Model
             return user;
         }
 
-        public AuthorizedUser GetAuthorizedUser(string username)
+        public AuthorizedUser GetAuthorizedUser(int id)
         {
-            var user = authorizedUsers.FirstOrDefault(u => u.Username == username);
+            var user = authorizedUsers.FirstOrDefault(u => u.Id == id);
 
             if (user == null)
             {

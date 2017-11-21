@@ -30,7 +30,7 @@ namespace Server.Handlers
             {
                 Users = manager
                     .GetAuthorizedUsers()
-                    .Select(aU => new UserDetailsResponse {Username = aU.Username, Online = true})
+                    .Select(aU => new UserDetailsResponse {Id = aU.Id, Username = aU.Username, Online = true})
                     .ToList()
             });
         }

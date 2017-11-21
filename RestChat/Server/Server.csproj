@@ -59,6 +59,7 @@
     <Compile Include="Handlers\UserListHandler.cs" />
     <Compile Include="Model\AuthorizationManager.cs" />
     <Compile Include="Model\AuthorizedUser.cs" />
+    <Compile Include="Model\Message.cs" />
     <Compile Include="Model\MessagesManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

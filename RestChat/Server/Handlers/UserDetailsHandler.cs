@@ -15,7 +15,7 @@ namespace Server.Handlers
             this.manager = manager;
         }
 
-        public override Regex Endpoint => new Regex("^/users/(\\w+)$");
+        public override Regex Endpoint => new Regex("^/users/(\\d+)$");
         public override string HttpMethod => "GET";
 
         public override Task<UserDetailsResponse> Handle(EmptyData _)
@@ -25,11 +25,12 @@ namespace Server.Handlers
                 throw new HttpException(401);
             }
 
-            var username = EndpointRegexMatch.Groups[1].Value;
-            var user = manager.GetAuthorizedUser(username);
+            var userId = int.Parse(EndpointRegexMatch.Groups[1].Value);
+            var user = manager.GetAuthorizedUser(userId);
 
             return Task.FromResult(new UserDetailsResponse
             {
+                Id = user.Id,
                 Username = user.Username,
                 Online = true
             });

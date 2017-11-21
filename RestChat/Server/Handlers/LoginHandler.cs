@@ -19,13 +19,14 @@ namespace Server.Handlers
 
         public override Task<LoginResponse> Handle(LoginRequest requestData)
         {
-            var token = manager.AuthorizeUser(requestData.Username);
+            var user = manager.AuthorizeUser(requestData.Username);
 
             return Task.FromResult(new LoginResponse
             {
-                Username = requestData.Username,
+                Id = user.Id,
+                Username = user.Username,
                 Online = true,
-                Token = token
+                Token = user.Token
             });
         }
     }
