@@ -1,0 +1,38 @@
+﻿using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Server.Exceptions;
+using Server.HandlersData;
+using Server.Model;
+
+namespace Server.Handlers
+{
+    public class UserListHandler : SimpleJsonHandler<EmptyData, UserListResponse>
+    {
+        private readonly AuthorizationManager manager;
+
+        public UserListHandler(AuthorizationManager manager) : base(manager)
+        {
+            this.manager = manager;
+        }
+
+        public override Regex GetEndpoint => new Regex("^/users$");
+        public override string HttpMethod => "GET";
+
+        public override Task<UserListResponse> Handle(EmptyData _)
+        {
+            if (CurrentUser == null)
+            {
+                throw new HttpException(401);
+            }
+
+            return Task.FromResult(new UserListResponse
+            {
+                Users = manager
+                    .GetAuthorizedUsers()
+                    .Select(aU => new UserListResponseUser {Username = aU.Username, Online = true})
+                    .ToList()
+            });
+        }
+    }
+}

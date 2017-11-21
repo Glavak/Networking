@@ -12,6 +12,7 @@ namespace Server
             var authorizationManager = new AuthorizationManager();
             server.Handlers.Add(new LoginHandler(authorizationManager));
             server.Handlers.Add(new LogoutHandler(authorizationManager));
+            server.Handlers.Add(new UserListHandler(authorizationManager));
 
             server.Start();
 

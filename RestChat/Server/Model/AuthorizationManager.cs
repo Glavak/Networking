@@ -48,5 +48,10 @@ namespace Server.Model
 
             return user;
         }
+
+        public IEnumerable<AuthorizedUser> GetAuthorizedUsers()
+        {
+            return authorizedUsers;
+        }
     }
 }

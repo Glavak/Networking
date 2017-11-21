@@ -5,9 +5,6 @@ namespace Server.HandlersData
 {
     public class LoginResponse
     {
-        [JsonProperty("id")]
-        public int Id;
-
         [JsonProperty("username")]
         public string Username;
 
