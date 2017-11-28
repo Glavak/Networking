@@ -47,17 +47,8 @@
   <ItemGroup>
     <Compile Include="Exceptions\HttpException.cs" />
     <Compile Include="Exceptions\UsernameTakenException.cs" />
-    <Compile Include="HandlersData\EmptyData.cs" />
-    <Compile Include="HandlersData\GetMessagesResponse.cs" />
-    <Compile Include="HandlersData\LogoutResponse.cs" />
-    <Compile Include="HandlersData\PostMessageRequest.cs" />
-    <Compile Include="HandlersData\PostMessageResponse.cs" />
-    <Compile Include="HandlersData\UserListResponse.cs" />
-    <Compile Include="HandlersData\UserDetailsResponse.cs" />
     <Compile Include="Handlers\GetMessagesHandler.cs" />
     <Compile Include="Handlers\LoginHandler.cs" />
-    <Compile Include="HandlersData\LoginRequest.cs" />
-    <Compile Include="HandlersData\LoginResponse.cs" />
     <Compile Include="Handlers\LogoutHandler.cs" />
     <Compile Include="Handlers\PostMessageHandler.cs" />
     <Compile Include="Handlers\UserDetailsHandler.cs" />
@@ -74,6 +65,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Model\Model.csproj">
+      <Project>{3f794bca-691a-4900-8403-ab3828195ee9}</Project>
+      <Name>Model</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

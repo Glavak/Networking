@@ -37,6 +37,8 @@ namespace Server
                     byte[] buffer = Encoding.UTF8.GetBytes(e.Message);
                     Response.ContentLength64 = buffer.Length;
                     Response.OutputStream.Write(buffer, 0, buffer.Length);
+
+                    Console.WriteLine(e.Message + e.StackTrace);
                 }
                 finally
                 {

@@ -2,7 +2,7 @@
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Server.Exceptions;
-using Server.HandlersData;
+using Model.HandlersData;
 using Server.Model;
 
 namespace Server.Handlers
@@ -33,7 +33,7 @@ namespace Server.Handlers
             {
                 offset = 0;
             }
-            else if (offset <= 0)
+            else if (offset < 0)
             {
                 throw new HttpException(400);
             }
