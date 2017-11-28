@@ -34,7 +34,7 @@ namespace Server.Handlers
                     {
                         Id = aU.Id,
                         Username = aU.Username,
-                        Online = aU.Online ? (bool?) true : null
+                        Online = aU.Online
                     })
                     .ToList()
             });

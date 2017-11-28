@@ -34,7 +34,7 @@ namespace Server.Handlers
             {
                 Id = user.Id,
                 Username = user.Username,
-                Online = user.Online ? (bool?) true : null
+                Online = user.Online
             });
         }
     }
